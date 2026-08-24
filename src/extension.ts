@@ -45,14 +45,18 @@ const DATA_CONFIG_EXTENSIONS = new Set([
 const SECRET_EXTENSIONS = new Set([
 	'.env', '.pem', '.key', '.ppk', '.p8', '.p12', '.pfx', '.crt', '.cer', '.der',
 	'.jks', '.keystore', '.truststore', '.kdbx', '.gpg', '.pgp', '.asc', '.ovpn',
-	'.mobileprovision', '.pubxml', '.publishsettings', '.properties', '.tfvars',
-	'.tfstate', '.netrc',
+	'.mobileprovision', '.xcconfig', '.pubxml', '.publishsettings', '.properties',
+	'.tfvars', '.tfstate', '.netrc',
 ]);
+
+// Java resource bundles share the .properties extension but hold translations, not secrets.
+const TRANSLATION_BUNDLE = /^(messages|labels|i18n|text|texts|strings|errors|validationmessages|bundle)([._-][a-z0-9_-]*)?\.properties$|_[a-z]{2}(_[a-z]{2})?\.properties$/;
 
 const SECRET_FILENAMES = new Set([
 	'.env', '.netrc', '.npmrc', '.pypirc', '.yarnrc', '.htpasswd', '.pgpass', '.my.cnf',
 	'.s3cfg', '.boto', '.dockercfg', '.git-credentials', '.aws-credentials',
 	'kubeconfig', 'known_hosts', 'parameters.yml', 'parameters.yaml',
+	'google-services.json', 'googleservice-info.plist',
 ]);
 
 const SECRET_FILENAME_PATTERNS = [
@@ -67,7 +71,7 @@ const SECRET_FILENAME_PATTERNS = [
 	/^service[._-]?account[a-z0-9._-]*\.json$/,
 	/^wp-config([._-].*)?\.php$/,
 	/^(dbconfig|databaseconfig|firebaseconfig)([._-]|$)/,
-	/^([a-z0-9]+_)?settings\.py$/,
+	/^([a-z0-9]+_)?(settings|config)\.py$/,
 	/\.tfvars\.json$/,
 	/\.tfstate\.backup$/,
 ];
@@ -87,7 +91,7 @@ const GENERATED_DIRECTORIES = /(^|\/)(node_modules|bower_components|vendor|\.git
 const GENERATED_FILENAMES = new Set([
 	'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml',
 	'composer.lock', 'gemfile.lock', 'poetry.lock', 'pipfile.lock', 'cargo.lock',
-	'podfile.lock', 'packages.lock.json',
+	'podfile.lock', 'packages.lock.json', 'go.sum',
 ]);
 
 const GENERATED_EXTENSIONS = new Set([
@@ -126,14 +130,14 @@ export function isSensitiveFile(filePath: string): boolean {
 	const extension = extensionOf(name);
 
 	if (SECRET_FILENAMES.has(name)
-		|| SECRET_EXTENSIONS.has(extension)
+		|| (SECRET_EXTENSIONS.has(extension) && !TRANSLATION_BUNDLE.test(name))
 		|| SECRET_WORDS.test(name)
 		|| SECRET_FILENAME_PATTERNS.some((pattern) => pattern.test(name))) {
 		return true;
 	}
 
-	// Django keeps SECRET_KEY and database passwords in a settings package.
-	if (/(^|\/)settings\/[^/]+\.py$/.test(path)) {
+	// Django settings packages and Flask instance folders hold SECRET_KEY and database URIs.
+	if (/(^|\/)(settings|instance)\/[^/]+\.py$/.test(path)) {
 		return true;
 	}
 

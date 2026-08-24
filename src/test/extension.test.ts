@@ -93,6 +93,15 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('k8s/secret.yaml'), true);
 		assert.strictEqual(isSensitiveFile('helm/values.yaml'), true);
 		assert.strictEqual(isSensitiveFile('ansible/group_vars/all/vault.yml'), true);
+		// Mobile
+		assert.strictEqual(isSensitiveFile('app/google-services.json'), true);
+		assert.strictEqual(isSensitiveFile('Runner/GoogleService-Info.plist'), true);
+		assert.strictEqual(isSensitiveFile('Config/Release.xcconfig'), true);
+		assert.strictEqual(isSensitiveFile('android/key.properties'), true);
+		assert.strictEqual(isSensitiveFile('instance/config.py'), true);
+		assert.strictEqual(isSensitiveFile('config/prod.secret.exs'), true);
+		assert.strictEqual(isSensitiveFile('conf/application.conf'), true);
+		assert.strictEqual(isSensitiveFile('.streamlit/secrets.toml'), true);
 	});
 
 	test('counts ordinary source files instead of hiding them', () => {
@@ -130,6 +139,16 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('app/config_loader.py'), false);
 		assert.strictEqual(isSensitiveFile('.gitignore'), false);
 		assert.strictEqual(isSensitiveFile('package-lock.json'), false);
+		// Java resource bundles are translations, not credentials.
+		assert.strictEqual(isSensitiveFile('resources/messages_en.properties'), false);
+		assert.strictEqual(isSensitiveFile('resources/messages.properties'), false);
+		assert.strictEqual(isSensitiveFile('resources/labels_en_us.properties'), false);
+		assert.strictEqual(isSensitiveFile('resources/credentials_en.properties'), true);
+		// Elixir, Laravel and Play keep source code beside their config.
+		assert.strictEqual(isSensitiveFile('config/runtime.exs'), false);
+		assert.strictEqual(isSensitiveFile('config/app.php'), false);
+		assert.strictEqual(isSensitiveFile('k8s/deployment.yaml'), false);
+		assert.strictEqual(isSensitiveFile('Runner/Info.plist'), false);
 	});
 
 	test('excludes generated and binary files from the line count', () => {
