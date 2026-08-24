@@ -11,7 +11,7 @@ export function countLines(content: string): number {
 	return content.endsWith('\n') || content.endsWith('\r') ? lines.length - 1 : lines.length;
 }
 
-interface FileStats {
+export interface FileStats {
 	name: string;
 	extension: string;
 	area: FileArea;
@@ -20,7 +20,7 @@ interface FileStats {
 
 export type FileArea = 'Frontend' | 'Backend' | 'Other';
 
-interface ProjectStats {
+export interface ProjectStats {
 	files: FileStats[];
 	totalLines: number;
 }
@@ -257,8 +257,74 @@ function escapeHtml(value: string): string {
 	}[character] ?? character));
 }
 
+function escapeCsvCell(value: string): string {
+	const escaped = value.replace(/"/g, '""');
+	return /[",\n]/.test(value) ? `"${escaped}"` : escaped;
+}
+
+function getWorkbookExtensionLabel(extension: string): string {
+	if (extension === '[no extension]') {
+		return 'NO EXTENSION';
+	}
+
+	return extension.replace(/^\./, '').toUpperCase();
+}
+
+function groupProjectFiles(stats: ProjectStats): Array<{ extension: string; files: FileStats[]; totalLines: number }> {
+	const fileGroups = new Map<string, FileStats[]>();
+	for (const file of stats.files) {
+		const group = fileGroups.get(file.extension) ?? [];
+		group.push(file);
+		fileGroups.set(file.extension, group);
+	}
+
+	return [...fileGroups.entries()]
+		.sort(([first], [second]) => first.localeCompare(second))
+		.map(([extension, files]) => ({
+			extension,
+			files: [...files].sort((first, second) => first.name.localeCompare(second.name)),
+			totalLines: files.reduce((total, file) => total + file.lines, 0),
+		}));
+}
+
+export function buildProjectStatsCsv(stats: ProjectStats): string {
+	const rows: string[] = [];
+	const groups = groupProjectFiles(stats);
+	const fileTypeCount = new Set(stats.files.map((file) => file.extension)).size;
+	const projectName = vscode.workspace.name ?? 'Project';
+
+	rows.push('PROJECT STATISTICS REPORT');
+	rows.push('');
+	rows.push('Project Name,Value');
+	rows.push(`Project Name,${escapeCsvCell(projectName)}`);
+	rows.push(`Total Files,${stats.files.length}`);
+	rows.push(`Total Lines,${stats.totalLines}`);
+	rows.push(`File Types,${fileTypeCount}`);
+	rows.push('');
+	rows.push('FILE TYPE SUMMARY');
+	rows.push('File Type,Number of Files,Total Lines');
+
+	for (const group of groups) {
+		rows.push(`${escapeCsvCell(getWorkbookExtensionLabel(group.extension))},${group.files.length},${group.totalLines}`);
+	}
+
+	rows.push('');
+	rows.push('DETAILED FILE BREAKDOWN');
+
+	for (const group of groups) {
+		rows.push(`${escapeCsvCell(`${getWorkbookExtensionLabel(group.extension)} FILES - ${group.files.length} FILE${group.files.length === 1 ? '' : 'S'}`)},,`);
+		rows.push('File,Lines,');
+		for (const file of group.files) {
+			rows.push(`${escapeCsvCell(file.name)},${file.lines},`);
+		}
+		rows.push('');
+	}
+
+	return rows.join('\r\n');
+}
 async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 	const stats = await collectProjectStats();
+	const csvContent = buildProjectStatsCsv(stats);
 	const areas: FileArea[] = ['Frontend', 'Backend', 'Other'];
 	const areaHtml = areas.map((area) => {
 		const areaFiles = stats.files.filter((file) => file.area === area);
@@ -290,6 +356,9 @@ main { max-width: 980px; margin: 0 auto; }
 .topbar { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 26px; }
 h1 { font-size: 26px; margin: 0; }
 .subtitle { color: var(--vscode-descriptionForeground); margin: 4px 0 0; }
+.topbar-actions { display: flex; align-items: center; }
+.download-button { background: var(--vscode-button-background); border: 1px solid var(--vscode-button-border, transparent); color: var(--vscode-button-foreground); cursor: pointer; font: inherit; padding: 8px 14px; }
+.download-button:hover { background: var(--vscode-button-hoverBackground); }
 .controls { display: flex; gap: 8px; margin-bottom: 18px; }
 input, select { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); color: var(--vscode-input-foreground); font: inherit; padding: 8px 10px; }
 input { flex: 1; min-width: 180px; }
@@ -318,7 +387,7 @@ li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; 
 </head>
 <body>
 <main>
-<div class="topbar"><div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div></div>
+<div class="topbar"><div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div><div class="topbar-actions"><button id="download-csv" class="download-button" type="button">Download CSV</button></div></div>
 <div class="controls"><input id="search" type="search" placeholder="Search files..." aria-label="Search files"><select id="area-filter" aria-label="Filter by area"><option value="all">All areas</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></div>
 <div class="summary">
 <div class="metric"><strong>${stats.files.length}</strong>Total files</div>
@@ -330,6 +399,7 @@ ${areaHtml}
 <script>
 const search = document.getElementById('search');
 const areaFilter = document.getElementById('area-filter');
+const csvContent = ${JSON.stringify(csvContent)};
 function filterFiles() {
 	const query = search.value.toLowerCase();
 	const area = areaFilter.value;
@@ -351,6 +421,15 @@ function filterFiles() {
 }
 search.addEventListener('input', filterFiles);
 areaFilter.addEventListener('change', filterFiles);
+document.getElementById('download-csv').addEventListener('click', () => {
+	const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = 'project-statistics.csv';
+	link.click();
+	URL.revokeObjectURL(url);
+});
 </script>
 </body>
 </html>`;

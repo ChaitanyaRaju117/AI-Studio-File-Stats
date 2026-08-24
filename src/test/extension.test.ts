@@ -2,12 +2,9 @@ import * as assert from 'assert';
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
-import * as vscode from 'vscode';
-import { classifyFile, countLines, isGeneratedFile, isSensitiveFile } from '../extension';
+import { buildProjectStatsCsv, classifyFile, countLines, isGeneratedFile, isSensitiveFile, type ProjectStats } from '../extension';
 
 suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
-
 	test('Sample test', () => {
 		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
 		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
@@ -208,5 +205,35 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(classifyFile('api/routes.rb', '.rb'), 'Backend');
 		assert.strictEqual(classifyFile('src/shared/types.ts', '.ts'), 'Frontend');
 		assert.strictEqual(classifyFile('README.md', '.md'), 'Other');
+	});
+
+	test('builds a detailed CSV report from the displayed stats data', () => {
+		const stats: ProjectStats = {
+			files: [
+				{ name: 'package-lock.json', extension: '.json', area: 'Frontend', lines: 3300 },
+				{ name: 'package.json', extension: '.json', area: 'Frontend', lines: 27 },
+				{ name: 'tsconfig.json', extension: '.json', area: 'Frontend', lines: 21 },
+				{ name: 'index.html', extension: '.html', area: 'Frontend', lines: 18 },
+				{ name: 'styles.css', extension: '.css', area: 'Frontend', lines: 42 },
+			],
+			totalLines: 3408,
+		};
+
+		const csv = buildProjectStatsCsv(stats);
+		assert.ok(csv.startsWith('PROJECT STATISTICS REPORT'));
+		assert.ok(csv.includes('Project Name,Value'));
+		assert.ok(csv.includes('Total Files,5'));
+		assert.ok(csv.includes('Total Lines,3408'));
+		assert.ok(csv.includes('File Types,3'));
+		assert.ok(csv.includes('FILE TYPE SUMMARY'));
+		assert.ok(csv.includes('File Type,Number of Files,Total Lines'));
+		assert.ok(csv.includes('CSS,1,42'));
+		assert.ok(csv.includes('HTML,1,18'));
+		assert.ok(csv.includes('JSON,3,3348'));
+		assert.ok(csv.includes('DETAILED FILE BREAKDOWN'));
+		assert.ok(csv.includes('JSON FILES - 3 FILES'));
+		assert.ok(csv.includes('File,Lines,'));
+		assert.ok(csv.includes('package-lock.json,3300,'));
+		assert.ok(!csv.includes('Download XLSX'));
 	});
 });
