@@ -11,36 +11,86 @@ export function countLines(content: string): number {
 	return content.endsWith('\n') || content.endsWith('\r') ? lines.length - 1 : lines.length;
 }
 
-interface PythonFileStats {
-	path: string;
+interface FileStats {
+	name: string;
+	extension: string;
 	lines: number;
 }
 
 interface ProjectStats {
-	pythonFiles: PythonFileStats[];
-	markdownFiles: string[];
+	files: FileStats[];
+	totalLines: number;
 }
 
 let statisticsPanel: vscode.WebviewPanel | undefined;
 
-async function collectProjectStats(): Promise<ProjectStats> {
-	const exclude = '**/{node_modules,.git,.venv,venv,__pycache__}/**';
-	const pythonUris = await vscode.workspace.findFiles('**/*.py', exclude);
-	const markdownUris = await vscode.workspace.findFiles('**/*.md', exclude);
+export function isSensitiveFile(filePath: string): boolean {
+	const lowerCasePath = filePath.toLowerCase().replaceAll('\\', '/');
+	const lowerCaseName = lowerCasePath.split('/').pop() ?? lowerCasePath;
+	return lowerCaseName === '.dockerignore'
+		|| lowerCaseName === '.env'
+		|| lowerCaseName.startsWith('.env.')
+		|| lowerCaseName === '.gitignore'
+		|| lowerCaseName === '.npmrc'
+		|| lowerCaseName === '.pypirc'
+		|| lowerCaseName === '.yarnrc'
+		|| lowerCaseName === 'dockerfile'
+		|| lowerCaseName.startsWith('dockerfile.')
+		|| lowerCaseName.startsWith('docker-compose.')
+		|| lowerCaseName === 'credentials.json'
+		|| lowerCaseName === 'secrets.json'
+		|| lowerCaseName === 'service-account.json'
+		|| lowerCaseName === 'id_rsa'
+		|| lowerCaseName === 'id_ed25519'
+		|| lowerCaseName === 'known_hosts'
+		|| lowerCaseName.endsWith('.pem')
+		|| lowerCaseName.endsWith('.key')
+		|| lowerCaseName.endsWith('.p12')
+		|| lowerCaseName.endsWith('.pfx')
+		|| lowerCaseName.endsWith('.crt')
+		|| lowerCaseName.endsWith('.cer')
+		|| lowerCaseName.endsWith('.sqlite')
+		|| lowerCaseName.endsWith('.sqlite3')
+		|| lowerCaseName.endsWith('.db')
+		|| lowerCaseName.endsWith('.dump')
+		|| lowerCaseName.endsWith('.bak')
+		|| lowerCaseName.endsWith('.tfstate')
+		|| lowerCaseName.endsWith('.tfstate.backup')
+		|| lowerCasePath.includes('/.aws/credentials')
+		|| lowerCasePath.includes('/.aws/config')
+		|| lowerCasePath.includes('/.kube/config')
+		|| lowerCaseName.endsWith('.lock');
+}
 
-	const pythonFiles = await Promise.all(pythonUris.map(async (uri) => {
-		const content = await vscode.workspace.fs.readFile(uri);
-		return {
-			path: vscode.workspace.asRelativePath(uri),
-			lines: countLines(new TextDecoder().decode(content)),
-		};
-	}));
+async function collectProjectStats(): Promise<ProjectStats> {
+	const exclude = '**/{node_modules,.git,.venv,venv,__pycache__,out,dist,build,.vscode-test}/**';
+	const fileUris = await vscode.workspace.findFiles('**/*', exclude);
+	const files: FileStats[] = [];
+
+	for (const uri of fileUris) {
+		const name = uri.path.split('/').pop() ?? uri.fsPath;
+		if (isSensitiveFile(name)) {
+			continue;
+		}
+
+		try {
+			const content = await vscode.workspace.fs.readFile(uri);
+			const extension = name.includes('.') && !name.startsWith('.')
+				? `.${name.split('.').pop()?.toLowerCase()}`
+				: '[no extension]';
+			files.push({
+				name,
+				extension,
+				lines: countLines(new TextDecoder().decode(content)),
+			});
+		} catch {
+			// Ignore files that cannot be read.
+		}
+	}
 
 	return {
-		pythonFiles: pythonFiles.sort((first, second) => first.path.localeCompare(second.path)),
-		markdownFiles: markdownUris
-			.map((uri) => vscode.workspace.asRelativePath(uri))
-			.sort((first, second) => first.localeCompare(second)),
+		files: files.sort((first, second) => first.name.localeCompare(second.name)),
+		totalLines: files.reduce((total, file) => total + file.lines, 0),
 	};
 }
 
@@ -56,12 +106,19 @@ function escapeHtml(value: string): string {
 
 async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 	const stats = await collectProjectStats();
-	const pythonRows = stats.pythonFiles.length === 0
-		? '<li class="empty">No Python files found.</li>'
-		: stats.pythonFiles.map((file) => `<li><span>${escapeHtml(file.path)}</span><strong>${file.lines}</strong></li>`).join('');
-	const markdownRows = stats.markdownFiles.length === 0
-		? '<li class="empty">No Markdown files found.</li>'
-		: stats.markdownFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
+	const fileGroups = new Map<string, FileStats[]>();
+	for (const file of stats.files) {
+		const group = fileGroups.get(file.extension) ?? [];
+		group.push(file);
+		fileGroups.set(file.extension, group);
+	}
+	const groupsHtml = [...fileGroups.entries()]
+		.sort(([first], [second]) => first.localeCompare(second))
+		.map(([extension, files]) => `<section><h2>${escapeHtml(extension)} <span>${files.length}</span></h2><ul>${files
+			.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
+			.join('')}</ul></section>`)
+		.join('');
+	const content = groupsHtml || '<p class="empty">No files found.</p>';
 
 	panel.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -71,7 +128,8 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 <style>
 body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); padding: 20px; }
 h1 { font-size: 24px; margin: 0 0 20px; }
-h2 { font-size: 14px; margin: 28px 0 8px; text-transform: uppercase; letter-spacing: .08em; }
+h2 { border-bottom: 1px solid var(--vscode-panel-border); font-size: 14px; margin: 28px 0 8px; padding-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }
+h2 span { float: right; opacity: .7; }
 .summary { display: flex; gap: 12px; flex-wrap: wrap; }
 .metric { border: 1px solid var(--vscode-panel-border); padding: 14px; min-width: 130px; }
 .metric strong { display: block; font-size: 28px; color: var(--vscode-textLink-foreground); }
@@ -79,25 +137,15 @@ ul { list-style: none; padding: 0; margin: 0; }
 li { border-bottom: 1px solid var(--vscode-panel-border); display: flex; gap: 16px; justify-content: space-between; padding: 8px 0; }
 li strong { color: var(--vscode-textPreformat-foreground); }
 .empty { opacity: .7; }
-button { background: var(--vscode-button-background); border: 0; color: var(--vscode-button-foreground); cursor: pointer; padding: 7px 12px; }
-button:hover { background: var(--vscode-button-hoverBackground); }
 </style>
 </head>
 <body>
-<button id="refresh">Refresh</button>
 <h1>Project Statistics</h1>
 <div class="summary">
-<div class="metric"><strong>${stats.pythonFiles.length}</strong>Python files</div>
-<div class="metric"><strong>${stats.markdownFiles.length}</strong>Markdown files</div>
+<div class="metric"><strong>${stats.files.length}</strong>Total files</div>
+<div class="metric"><strong>${stats.totalLines}</strong>Total lines</div>
 </div>
-<h2>Python files and lines</h2>
-<ul>${pythonRows}</ul>
-<h2>Markdown files</h2>
-<ul>${markdownRows}</ul>
-<script>
-const vscode = acquireVsCodeApi();
-document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
-</script>
+${content}
 </body>
 </html>`;
 }
@@ -137,11 +185,6 @@ export function activate(context: vscode.ExtensionContext) {
 			{ enableScripts: true },
 		);
 		statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
-		statisticsPanel.webview.onDidReceiveMessage(async (message: { type: string }) => {
-			if (message.type === 'refresh' && statisticsPanel) {
-				await renderStatistics(statisticsPanel);
-			}
-		}, null, context.subscriptions);
 		await renderStatistics(statisticsPanel);
 	});
 

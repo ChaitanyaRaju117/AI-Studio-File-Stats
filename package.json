@@ -1,9 +1,10 @@
 {
   "name": "python-project-statistics",
-  "displayName": "python Project Statistics",
+  "displayName": "AI-Studio-File-Stats",
   "publisher": "chaitanyarajuBahatam",
-  "description": "Counts Python files and lines per file in your workspace",
-  "version": "0.0.1",
+  "description": "Counts files and lines by file type in your workspace",
+  "version": "0.0.4",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"
   },

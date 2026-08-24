@@ -1,15 +1,16 @@
-# Python Project Statistics
+# AI-Studio-File-Stats
 
-Python Project Statistics gives you a quick view of the Python and Markdown files in your VS Code workspace.
+AI-Studio-File-Stats gives you a structured view of all readable files in your VS Code workspace.
 
 ## Features
 
-- Shows the total number of `.py` files.
-- Shows the number of lines in every Python file.
-- Shows the total number of `.md` files and their paths.
+- Shows total files and total lines.
+- Groups files by extension, including Java, C, C++, Python, Markdown, and other file types.
+- Shows the file name and number of lines in each file.
 - Opens the report in a separate `Project Statistics` editor tab.
 - Provides a Refresh button to rescan the workspace.
 - Excludes dependency, version-control, virtual-environment, and Python cache directories.
+- Does not read or display sensitive environment, Docker, Git, or lock files.
 
 ## Usage
 
@@ -35,6 +36,10 @@ Line counts are based on physical lines in each file. Files that cannot be read 
 
 ## Release Notes
 
-### 0.0.1
+### 0.0.2
 
-Initial release with Python and Markdown project statistics.
+Added all-file statistics, extension grouping, and an extension icon.
+
+### 0.0.4
+
+Added privacy exclusions for environment, Docker, Git, and lock files.
