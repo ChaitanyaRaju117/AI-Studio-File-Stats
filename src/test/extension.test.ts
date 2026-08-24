@@ -42,6 +42,13 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('src/.idea/workspace.xml'), true);
 		assert.strictEqual(isSensitiveFile('local.env'), true);
 		assert.strictEqual(isSensitiveFile('gcp-credentials.json'), true);
+		assert.strictEqual(isSensitiveFile('.netrc'), true);
+		assert.strictEqual(isSensitiveFile('ssh/id_dsa'), true);
+		assert.strictEqual(isSensitiveFile('keys/client.ppk'), true);
+		assert.strictEqual(isSensitiveFile('certs/server.der'), true);
+		assert.strictEqual(isSensitiveFile('old/config.old'), true);
+		assert.strictEqual(isSensitiveFile('passwords.kdbx'), true);
+		assert.strictEqual(isSensitiveFile('vendor/private-data.txt'), true);
 		assert.strictEqual(isSensitiveFile('src/UserService.java'), false);
 		assert.strictEqual(isSensitiveFile('package-lock.json'), false);
 		assert.strictEqual(isSensitiveFile('main.c'), false);
@@ -62,6 +69,9 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('src/firebaseConfig.ts'), true);
 		assert.strictEqual(isSensitiveFile('public/api-keys.js'), true);
 		assert.strictEqual(isSensitiveFile('client_secret.json'), true);
+		assert.strictEqual(isSensitiveFile('src/AuthService.ts'), false);
+		assert.strictEqual(isSensitiveFile('src/TokenBucket.java'), false);
+		assert.strictEqual(isSensitiveFile('src/DatabaseConnection.ts'), false);
 		assert.strictEqual(classifyFile('frontend/App.tsx', '.tsx'), 'Frontend');
 		assert.strictEqual(classifyFile('client/styles.css', '.css'), 'Frontend');
 		assert.strictEqual(classifyFile('backend/OrderService.java', '.java'), 'Backend');

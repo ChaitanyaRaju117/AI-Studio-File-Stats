@@ -30,8 +30,8 @@ let statisticsPanel: vscode.WebviewPanel | undefined;
 export function isSensitiveFile(filePath: string): boolean {
 	const lowerCasePath = filePath.toLowerCase().replaceAll('\\', '/');
 	const lowerCaseName = lowerCasePath.split('/').pop() ?? lowerCasePath;
-	const sensitiveName = /(config|configuration|secret|secrets|credential|credentials|password|passwd|token|auth|private|connection|apikey|api-key|key)/;
-	const sensitiveDirectory = /(^|\/)(config|configs|secrets|credentials|private|certificates|keys|target|build|\.gradle|\.idea)(\/|$)/;
+	const sensitiveName = /(^|[._-])(config|configuration|secret|secrets|credential|credentials|password|passwd|apikey|api-key|api-keys)([._-]|$)/;
+	const sensitiveDirectory = /(^|\/)(config|configs|conf|configuration|settings|secrets|secret|vault|credentials|creds|credential|private|certificates|certs|keys|key|target|build|\.gradle|\.idea|\.ssh|\.aws|\.kube|vendor)(\/|$)/;
 	return lowerCaseName === '.dockerignore'
 		|| lowerCaseName === '.env'
 		|| lowerCaseName.endsWith('.env')
@@ -40,6 +40,7 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCaseName === '.npmrc'
 		|| lowerCaseName === '.pypirc'
 		|| lowerCaseName === '.yarnrc'
+		|| lowerCaseName === '.netrc'
 		|| lowerCaseName === 'application.properties'
 		|| /^application-.*\.properties$/.test(lowerCaseName)
 		|| lowerCaseName === 'application.yml'
@@ -61,14 +62,17 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCaseName === 'secrets.json'
 		|| lowerCaseName === 'service-account.json'
 		|| lowerCaseName === 'id_rsa'
+		|| lowerCaseName === 'id_dsa'
 		|| lowerCaseName === 'id_ed25519'
 		|| lowerCaseName === 'known_hosts'
 		|| lowerCaseName.endsWith('.pem')
 		|| lowerCaseName.endsWith('.key')
+		|| lowerCaseName.endsWith('.ppk')
 		|| lowerCaseName.endsWith('.p12')
 		|| lowerCaseName.endsWith('.pfx')
 		|| lowerCaseName.endsWith('.crt')
 		|| lowerCaseName.endsWith('.cer')
+		|| lowerCaseName.endsWith('.der')
 		|| lowerCaseName.endsWith('.jks')
 		|| lowerCaseName.endsWith('.keystore')
 		|| lowerCaseName.endsWith('.truststore')
@@ -80,11 +84,15 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCaseName.endsWith('.db')
 		|| lowerCaseName.endsWith('.dump')
 		|| lowerCaseName.endsWith('.bak')
+		|| lowerCaseName.endsWith('.old')
 		|| lowerCaseName.endsWith('.tfstate')
 		|| lowerCaseName.endsWith('.tfstate.backup')
+		|| lowerCaseName.endsWith('.kdbx')
 		|| lowerCasePath.includes('/.aws/credentials')
 		|| lowerCasePath.includes('/.aws/config')
 		|| lowerCasePath.includes('/.kube/config')
+		|| lowerCasePath.includes('/.docker/config.json')
+		|| /^(dbconfig|databaseconfig|firebaseconfig)([-_.]|$)/.test(lowerCaseName)
 		|| sensitiveName.test(lowerCaseName)
 		|| sensitiveDirectory.test(lowerCasePath)
 		|| lowerCaseName.endsWith('.lock');
