@@ -57,6 +57,8 @@ const SECRET_FILENAMES = new Set([
 	'.s3cfg', '.boto', '.dockercfg', '.git-credentials', '.aws-credentials',
 	'kubeconfig', 'known_hosts', 'parameters.yml', 'parameters.yaml',
 	'google-services.json', 'googleservice-info.plist',
+	// A Docker registry writes its basic-auth file without the Apache leading dot.
+	'htpasswd', 'htdigest',
 ]);
 
 const SECRET_FILENAME_PATTERNS = [
@@ -64,7 +66,8 @@ const SECRET_FILENAME_PATTERNS = [
 	/^\.yarnrc(\.|$)/,
 	/^id_[a-z0-9]+$/,
 	/^dockerfile(\.|$)/,
-	/^docker-compose([._-]|$)/,
+	// docker-stack is the Swarm counterpart of docker-compose and carries the same environment values.
+	/^docker-(compose|stack)([._-]|$)/,
 	/^application([._-].*)?\.ya?ml$/,
 	/^bootstrap([._-].*)?\.ya?ml$/,
 	/^appsettings([._-].*)?\.json$/,
@@ -78,6 +81,9 @@ const SECRET_FILENAME_PATTERNS = [
 
 // Words that identify the file itself as a secret store, whatever its extension.
 const SECRET_WORDS = /(^|[._-])(secret|secrets|credential|credentials|apikey|api_key|api_keys|api-key|api-keys|passwd)([._-]|$)/;
+
+// credentials.model.ts and friends declare a shape rather than holding one.
+const TYPE_DECLARATION = /\.(model|models|dto|interface|interfaces|type|types|enum|enums|schema)\.(ts|tsx|js|jsx)$/;
 
 // Words that only imply secrets in configuration/data files, never in source code.
 const CONFIG_SECRET_WORDS = /(^|[._-])(config|configuration|conf|settings|password|passwords|private|vault|auth|token)([._-]|$)/;
@@ -131,7 +137,7 @@ export function isSensitiveFile(filePath: string): boolean {
 
 	if (SECRET_FILENAMES.has(name)
 		|| (SECRET_EXTENSIONS.has(extension) && !TRANSLATION_BUNDLE.test(name))
-		|| SECRET_WORDS.test(name)
+		|| (SECRET_WORDS.test(name) && !TYPE_DECLARATION.test(name))
 		|| SECRET_FILENAME_PATTERNS.some((pattern) => pattern.test(name))) {
 		return true;
 	}
@@ -171,24 +177,34 @@ function looksBinary(content: Uint8Array): boolean {
 	return content.subarray(0, 8000).includes(0);
 }
 
+// Extensions that settle the question on their own, whichever directory they sit in. A Spring
+// controller in a com.example.web package is backend code even though the package is named web.
+const FRONTEND_ONLY_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less', '.styl', '.html', '.htm', '.jsx', '.tsx', '.vue', '.svelte', '.astro']);
+const BACKEND_ONLY_EXTENSIONS = new Set(['.java', '.py', '.rb', '.php', '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.go', '.rs', '.kt', '.kts', '.scala', '.groovy', '.cs', '.swift', '.ex', '.exs', '.erl', '.pl', '.sql']);
+// Only consulted for extensions that both sides share, such as .ts in an Angular app and a Node service.
+const AMBIGUOUS_FRONTEND_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts']);
+
+// The optional affixes let compound service names such as web-ui or auth-service match.
+const FRONTEND_DIRECTORY = /(^|\/)([a-z0-9]+[-_])?(frontend|front-end|client|web|webapp|ui|dashboard|public|pages|components|views|static)([-_][a-z0-9-]+)?(\/|$)/;
+const BACKEND_DIRECTORY = /(^|\/)([a-z0-9]+[-_])?(backend|back-end|server|api|apis|service|services|microservice|microservices|worker|workers|controllers|routes|handlers|repository|repositories|daemon)([-_][a-z0-9-]+)?(\/|$)/;
+
 export function classifyFile(filePath: string, extension: string): FileArea {
 	const normalizedPath = filePath.toLowerCase().replaceAll('\\', '/');
-	const frontendDirectory = /(^|\/)(frontend|front-end|client|web|ui|public|pages|components)(\/|$)/;
-	const backendDirectory = /(^|\/)(backend|back-end|server|api|services|controllers|routes)(\/|$)/;
-	const frontendExtension = new Set(['.css', '.scss', '.sass', '.less', '.html', '.htm', '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.astro']);
-	const backendExtension = new Set(['.java', '.py', '.rb', '.php', '.c', '.cpp', '.cc', '.h', '.hpp', '.go', '.rs', '.kt', '.kts', '.cs', '.swift']);
 
-	if (frontendDirectory.test(normalizedPath)) {
+	if (FRONTEND_ONLY_EXTENSIONS.has(extension)) {
 		return 'Frontend';
 	}
-	if (backendDirectory.test(normalizedPath)) {
+	if (BACKEND_ONLY_EXTENSIONS.has(extension)) {
 		return 'Backend';
 	}
-	if (frontendExtension.has(extension)) {
+	if (FRONTEND_DIRECTORY.test(normalizedPath)) {
 		return 'Frontend';
 	}
-	if (backendExtension.has(extension)) {
+	if (BACKEND_DIRECTORY.test(normalizedPath)) {
 		return 'Backend';
+	}
+	if (AMBIGUOUS_FRONTEND_EXTENSIONS.has(extension)) {
+		return 'Frontend';
 	}
 	return 'Other';
 }

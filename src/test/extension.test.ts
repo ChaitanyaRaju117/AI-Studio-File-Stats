@@ -171,7 +171,37 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isGeneratedFile('README.md'), false);
 	});
 
+	test('handles a polyglot microservices monorepo', () => {
+		// Swarm stack files carry the same environment secrets as compose files.
+		assert.strictEqual(isSensitiveFile('docker-stack.yml'), true);
+		assert.strictEqual(isSensitiveFile('docker-stack.prod.yml'), true);
+		assert.strictEqual(isSensitiveFile('docker-compose.registry.yml'), true);
+		// A Docker registry writes htpasswd without the Apache leading dot.
+		assert.strictEqual(isSensitiveFile('registry/auth/htpasswd'), true);
+		assert.strictEqual(isSensitiveFile('.htpasswd'), true);
+		assert.strictEqual(isSensitiveFile('registry/certs/domain.key'), true);
+		assert.strictEqual(isSensitiveFile('pact/ssl/nginx-selfsigned.key'), true);
+		assert.strictEqual(isSensitiveFile('auth-service/src/main/resources/application.yml'), true);
+		assert.strictEqual(isSensitiveFile('services/billing/appsettings.Production.json'), true);
+		assert.strictEqual(isSensitiveFile('deploy/charts/payment/values.yaml'), true);
+		// A type declaration describes a credential shape, it does not hold one.
+		assert.strictEqual(isSensitiveFile('ui/src/app/core/credentials.model.ts'), false);
+		assert.strictEqual(isSensitiveFile('public/api-keys.js'), true);
+		assert.strictEqual(isSensitiveFile('services/payment-service/cmd/server/main.go'), false);
+		assert.strictEqual(isSensitiveFile('ui/src/app/app.component.ts'), false);
+		assert.strictEqual(isSensitiveFile('.github/workflows/maven.yml'), false);
+	});
+
 	test('classifies files by area', () => {
+		// A Spring controller lives in a package named web but is backend code.
+		assert.strictEqual(classifyFile('auth-service/src/main/java/com/example/auth/web/AuthenticationController.java', '.java'), 'Backend');
+		assert.strictEqual(classifyFile('user-service/src/main/java/com/example/user/web/UserForm.java', '.java'), 'Backend');
+		// An Angular app keeps its area even when the service folder is a compound name.
+		assert.strictEqual(classifyFile('ui/src/app/app.component.ts', '.ts'), 'Frontend');
+		assert.strictEqual(classifyFile('services/web-ui/src/App.tsx', '.tsx'), 'Frontend');
+		assert.strictEqual(classifyFile('services/admin-dashboard/styles.css', '.css'), 'Frontend');
+		assert.strictEqual(classifyFile('services/web-ui/src/index.ts', '.ts'), 'Frontend');
+		assert.strictEqual(classifyFile('services/auth-service/src/index.ts', '.ts'), 'Backend');
 		assert.strictEqual(classifyFile('frontend/App.tsx', '.tsx'), 'Frontend');
 		assert.strictEqual(classifyFile('client/styles.css', '.css'), 'Frontend');
 		assert.strictEqual(classifyFile('backend/OrderService.java', '.java'), 'Backend');
