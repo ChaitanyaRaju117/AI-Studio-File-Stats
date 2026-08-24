@@ -2,12 +2,9 @@ import * as assert from 'assert';
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
-import * as vscode from 'vscode';
-import { buildProjectStatsCsv, classifyFile, countLines, generateProjectStatsWorkbookV2, isSensitiveFile, type ProjectStats } from '../extension';
+import { buildProjectStatsCsv, classifyFile, countLines, isSensitiveFile, type ProjectStats } from '../extension';
 
 suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
-
 	test('Sample test', () => {
 		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
 		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
@@ -80,7 +77,7 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(classifyFile('README.md', '.md'), 'Other');
 	});
 
-	test('builds a clean CSV grouped by extension without totals', () => {
+	test('builds a detailed CSV report from the displayed stats data', () => {
 		const stats: ProjectStats = {
 			files: [
 				{ name: 'package-lock.json', extension: '.json', area: 'Frontend', lines: 3300 },
@@ -93,44 +90,20 @@ suite('Extension Test Suite', () => {
 		};
 
 		const csv = buildProjectStatsCsv(stats);
-		assert.ok(csv.startsWith('PROJECT STATISTICS'));
-		assert.ok(csv.includes('Project,Project Name'));
+		assert.ok(csv.startsWith('PROJECT STATISTICS REPORT'));
+		assert.ok(csv.includes('Project Name,Value'));
 		assert.ok(csv.includes('Total Files,5'));
 		assert.ok(csv.includes('Total Lines,3408'));
-		assert.ok(csv.includes('FILE TYPE,FILE,LINES'));
-		assert.ok(csv.includes('.json,package-lock.json,3300'));
-		assert.ok(csv.includes('.html,index.html,18'));
-		assert.ok(!csv.includes('Project Statistics'));
-		assert.ok(!csv.includes('File,Lines'));
-	});
-
-	test('builds a polished workbook from the displayed stats data', async () => {
-		const stats: ProjectStats = {
-			files: [
-				{ name: 'package-lock.json', extension: '.json', area: 'Frontend', lines: 3300 },
-				{ name: 'package.json', extension: '.json', area: 'Frontend', lines: 27 },
-				{ name: 'tsconfig.json', extension: '.json', area: 'Frontend', lines: 21 },
-				{ name: 'tsconfig.node.json', extension: '.json', area: 'Frontend', lines: 18 },
-				{ name: 'styles.css', extension: '.css', area: 'Frontend', lines: 42 },
-			],
-			totalLines: 3408,
-		};
-
-		const workbook = await generateProjectStatsWorkbookV2(stats);
-		const worksheet = workbook.getWorksheet('Project Statistics');
-
-		assert.ok(worksheet);
-		assert.strictEqual(worksheet?.getCell('A1').value, 'PROJECT STATISTICS REPORT');
-		assert.strictEqual(worksheet?.getCell('A2').value, 'Project Name');
-		assert.strictEqual(worksheet?.getCell('B2').value, vscode.workspace.name ?? 'Project');
-		assert.strictEqual(worksheet?.getCell('A9').value, 'FILE TYPE SUMMARY');
-		assert.strictEqual(worksheet?.getCell('A10').value, 'File Type');
-		assert.strictEqual(worksheet?.getCell('A11').value, 'CSS');
-		assert.strictEqual(worksheet?.getCell('A12').value, 'JSON');
-		assert.strictEqual(worksheet?.getCell('A14').value, 'DETAILED FILE BREAKDOWN');
-		assert.strictEqual(worksheet?.getCell('A15').value, 'CSS FILES — 1 FILE');
-		assert.strictEqual(worksheet?.getCell('A19').value, 'JSON FILES — 4 FILES');
-		assert.strictEqual(worksheet?.getCell('A20').value, 'File');
-		assert.strictEqual(worksheet?.getCell('A21').value, 'package-lock.json');
+		assert.ok(csv.includes('File Types,3'));
+		assert.ok(csv.includes('FILE TYPE SUMMARY'));
+		assert.ok(csv.includes('File Type,Number of Files,Total Lines'));
+		assert.ok(csv.includes('CSS,1,42'));
+		assert.ok(csv.includes('HTML,1,18'));
+		assert.ok(csv.includes('JSON,3,3348'));
+		assert.ok(csv.includes('DETAILED FILE BREAKDOWN'));
+		assert.ok(csv.includes('JSON FILES - 3 FILES'));
+		assert.ok(csv.includes('File,Lines,'));
+		assert.ok(csv.includes('package-lock.json,3300,'));
+		assert.ok(!csv.includes('Download XLSX'));
 	});
 });
