@@ -27,75 +27,144 @@ interface ProjectStats {
 
 let statisticsPanel: vscode.WebviewPanel | undefined;
 
+const SOURCE_CODE_EXTENSIONS = new Set([
+	'.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte', '.astro',
+	'.py', '.pyi', '.rb', '.erb', '.php', '.java', '.kt', '.kts', '.scala', '.groovy',
+	'.clj', '.cljs', '.go', '.rs', '.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hh',
+	'.cs', '.fs', '.vb', '.swift', '.m', '.mm', '.dart', '.lua', '.pl', '.pm', '.r',
+	'.jl', '.ex', '.exs', '.erl', '.hs', '.ml', '.sh', '.bash', '.zsh', '.fish',
+	'.ps1', '.psm1', '.bat', '.cmd', '.sql', '.graphql', '.gql', '.proto', '.tf', '.hcl',
+	'.html', '.htm', '.css', '.scss', '.sass', '.less', '.styl', '.md', '.mdx', '.rst',
+]);
+
+const DATA_CONFIG_EXTENSIONS = new Set([
+	'.json', '.json5', '.jsonc', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf',
+	'.config', '.xml', '.plist', '.txt', '.csv', '.tsv',
+]);
+
+const SECRET_EXTENSIONS = new Set([
+	'.env', '.pem', '.key', '.ppk', '.p8', '.p12', '.pfx', '.crt', '.cer', '.der',
+	'.jks', '.keystore', '.truststore', '.kdbx', '.gpg', '.pgp', '.asc', '.ovpn',
+	'.mobileprovision', '.pubxml', '.publishsettings', '.properties', '.tfvars',
+	'.tfstate', '.netrc',
+]);
+
+const SECRET_FILENAMES = new Set([
+	'.env', '.netrc', '.npmrc', '.pypirc', '.yarnrc', '.htpasswd', '.pgpass', '.my.cnf',
+	'.s3cfg', '.boto', '.dockercfg', '.git-credentials', '.aws-credentials',
+	'kubeconfig', 'known_hosts', 'parameters.yml', 'parameters.yaml',
+]);
+
+const SECRET_FILENAME_PATTERNS = [
+	/^\.env(\.|$)/,
+	/^\.yarnrc(\.|$)/,
+	/^id_[a-z0-9]+$/,
+	/^dockerfile(\.|$)/,
+	/^docker-compose([._-]|$)/,
+	/^application([._-].*)?\.ya?ml$/,
+	/^bootstrap([._-].*)?\.ya?ml$/,
+	/^appsettings([._-].*)?\.json$/,
+	/^service[._-]?account[a-z0-9._-]*\.json$/,
+	/^wp-config([._-].*)?\.php$/,
+	/^(dbconfig|databaseconfig|firebaseconfig)([._-]|$)/,
+	/^([a-z0-9]+_)?settings\.py$/,
+	/\.tfvars\.json$/,
+	/\.tfstate\.backup$/,
+];
+
+// Words that identify the file itself as a secret store, whatever its extension.
+const SECRET_WORDS = /(^|[._-])(secret|secrets|credential|credentials|apikey|api_key|api_keys|api-key|api-keys|passwd)([._-]|$)/;
+
+// Words that only imply secrets in configuration/data files, never in source code.
+const CONFIG_SECRET_WORDS = /(^|[._-])(config|configuration|conf|settings|password|passwords|private|vault|auth|token)([._-]|$)/;
+
+const CREDENTIAL_DIRECTORIES = /(^|\/)(\.ssh|\.aws|\.gnupg|\.kube|\.docker|\.m2|\.cargo|secret|secrets|credential|credentials|creds|vault|certs|certificates|keys)(\/|$)/;
+
+const CONFIG_DIRECTORIES = /(^|\/)(config|configs|conf|configuration|settings|helm|charts)(\/|$)/;
+
+const GENERATED_DIRECTORIES = /(^|\/)(node_modules|bower_components|vendor|\.git|\.svn|\.hg|dist|build|out|target|obj|\.gradle|\.idea|\.vs|\.vscode-test|__pycache__|\.pytest_cache|\.mypy_cache|\.venv|venv|site-packages|coverage|\.nyc_output|\.next|\.nuxt|\.svelte-kit|\.turbo|\.terraform)(\/|$)/;
+
+const GENERATED_FILENAMES = new Set([
+	'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml',
+	'composer.lock', 'gemfile.lock', 'poetry.lock', 'pipfile.lock', 'cargo.lock',
+	'podfile.lock', 'packages.lock.json',
+]);
+
+const GENERATED_EXTENSIONS = new Set([
+	'.lock', '.map', '.bak', '.old', '.orig', '.rej', '.tmp', '.temp', '.swp', '.log',
+]);
+
+const BINARY_EXTENSIONS = new Set([
+	'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.icns', '.webp', '.tif', '.tiff',
+	'.psd', '.ai', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.ttc',
+	'.zip', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.7z', '.rar', '.jar', '.war', '.ear',
+	'.nupkg', '.whl', '.egg', '.rpm', '.deb', '.dmg', '.iso',
+	'.exe', '.dll', '.so', '.dylib', '.bin', '.o', '.a', '.lib', '.obj', '.pdb',
+	'.class', '.pyc', '.pyo', '.pyd', '.wasm', '.node',
+	'.mp3', '.mp4', '.avi', '.mov', '.wav', '.flac', '.ogg', '.webm', '.mkv', '.m4a',
+	'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods',
+	'.db', '.sqlite', '.sqlite3', '.mdb', '.dump', '.pack', '.idx',
+	'.dat', '.pkl', '.h5', '.parquet',
+]);
+
+function normalizePath(filePath: string): string {
+	return filePath.toLowerCase().replaceAll('\\', '/');
+}
+
+function fileNameOf(normalizedPath: string): string {
+	return normalizedPath.split('/').pop() ?? normalizedPath;
+}
+
+function extensionOf(fileName: string): string {
+	const lastDot = fileName.lastIndexOf('.');
+	return lastDot > 0 ? fileName.slice(lastDot) : '';
+}
+
 export function isSensitiveFile(filePath: string): boolean {
-	const lowerCasePath = filePath.toLowerCase().replaceAll('\\', '/');
-	const lowerCaseName = lowerCasePath.split('/').pop() ?? lowerCasePath;
-	const sensitiveName = /(^|[._-])(config|configuration|secret|secrets|credential|credentials|password|passwd|apikey|api-key|api-keys)([._-]|$)/;
-	const sensitiveDirectory = /(^|\/)(config|configs|conf|configuration|settings|secrets|secret|vault|credentials|creds|credential|private|certificates|certs|keys|key|target|build|\.gradle|\.idea|\.ssh|\.aws|\.kube|vendor)(\/|$)/;
-	return lowerCaseName === '.dockerignore'
-		|| lowerCaseName === '.env'
-		|| lowerCaseName.endsWith('.env')
-		|| lowerCaseName.startsWith('.env.')
-		|| lowerCaseName === '.gitignore'
-		|| lowerCaseName === '.npmrc'
-		|| lowerCaseName === '.pypirc'
-		|| lowerCaseName === '.yarnrc'
-		|| lowerCaseName === '.netrc'
-		|| lowerCaseName === 'application.properties'
-		|| /^application-.*\.properties$/.test(lowerCaseName)
-		|| lowerCaseName === 'application.yml'
-		|| lowerCaseName === 'application.yaml'
-		|| lowerCaseName === 'secrets.properties'
-		|| lowerCaseName === 'secrets.yml'
-		|| lowerCaseName === 'secrets.yaml'
-		|| lowerCaseName === 'credentials.properties'
-		|| lowerCaseName === 'credentials.yml'
-		|| lowerCaseName === 'credentials.yaml'
-		|| lowerCaseName === 'aws.properties'
-		|| lowerCaseName === 'gcp-credentials.json'
-		|| lowerCaseName === 'azure-credentials.json'
-		|| lowerCaseName === 'kubeconfig'
-		|| lowerCaseName === 'dockerfile'
-		|| lowerCaseName.startsWith('dockerfile.')
-		|| lowerCaseName.startsWith('docker-compose.')
-		|| lowerCaseName === 'credentials.json'
-		|| lowerCaseName === 'secrets.json'
-		|| lowerCaseName === 'service-account.json'
-		|| lowerCaseName === 'id_rsa'
-		|| lowerCaseName === 'id_dsa'
-		|| lowerCaseName === 'id_ed25519'
-		|| lowerCaseName === 'known_hosts'
-		|| lowerCaseName.endsWith('.pem')
-		|| lowerCaseName.endsWith('.key')
-		|| lowerCaseName.endsWith('.ppk')
-		|| lowerCaseName.endsWith('.p12')
-		|| lowerCaseName.endsWith('.pfx')
-		|| lowerCaseName.endsWith('.crt')
-		|| lowerCaseName.endsWith('.cer')
-		|| lowerCaseName.endsWith('.der')
-		|| lowerCaseName.endsWith('.jks')
-		|| lowerCaseName.endsWith('.keystore')
-		|| lowerCaseName.endsWith('.truststore')
-		|| lowerCaseName.endsWith('.tfvars')
-		|| lowerCaseName.endsWith('.class')
-		|| lowerCaseName.endsWith('.pdf')
-		|| lowerCaseName.endsWith('.sqlite')
-		|| lowerCaseName.endsWith('.sqlite3')
-		|| lowerCaseName.endsWith('.db')
-		|| lowerCaseName.endsWith('.dump')
-		|| lowerCaseName.endsWith('.bak')
-		|| lowerCaseName.endsWith('.old')
-		|| lowerCaseName.endsWith('.tfstate')
-		|| lowerCaseName.endsWith('.tfstate.backup')
-		|| lowerCaseName.endsWith('.kdbx')
-		|| lowerCasePath.includes('/.aws/credentials')
-		|| lowerCasePath.includes('/.aws/config')
-		|| lowerCasePath.includes('/.kube/config')
-		|| lowerCasePath.includes('/.docker/config.json')
-		|| /^(dbconfig|databaseconfig|firebaseconfig)([-_.]|$)/.test(lowerCaseName)
-		|| sensitiveName.test(lowerCaseName)
-		|| sensitiveDirectory.test(lowerCasePath)
-		|| lowerCaseName.endsWith('.lock');
+	const path = normalizePath(filePath);
+	const name = fileNameOf(path);
+	const extension = extensionOf(name);
+
+	if (SECRET_FILENAMES.has(name)
+		|| SECRET_EXTENSIONS.has(extension)
+		|| SECRET_WORDS.test(name)
+		|| SECRET_FILENAME_PATTERNS.some((pattern) => pattern.test(name))) {
+		return true;
+	}
+
+	// Django keeps SECRET_KEY and database passwords in a settings package.
+	if (/(^|\/)settings\/[^/]+\.py$/.test(path)) {
+		return true;
+	}
+
+	const isSourceCode = SOURCE_CODE_EXTENSIONS.has(extension);
+	if (CREDENTIAL_DIRECTORIES.test(path) && !isSourceCode) {
+		return true;
+	}
+
+	const isConfigData = extension === '' || DATA_CONFIG_EXTENSIONS.has(extension);
+	if (!isConfigData) {
+		return false;
+	}
+
+	return CONFIG_SECRET_WORDS.test(name) || CONFIG_DIRECTORIES.test(path);
+}
+
+export function isGeneratedFile(filePath: string): boolean {
+	const path = normalizePath(filePath);
+	const name = fileNameOf(path);
+	const extension = extensionOf(name);
+
+	return GENERATED_FILENAMES.has(name)
+		|| GENERATED_EXTENSIONS.has(extension)
+		|| BINARY_EXTENSIONS.has(extension)
+		|| name.endsWith('.min.js')
+		|| name.endsWith('.min.css')
+		|| GENERATED_DIRECTORIES.test(path);
+}
+
+function looksBinary(content: Uint8Array): boolean {
+	return content.subarray(0, 8000).includes(0);
 }
 
 export function classifyFile(filePath: string, extension: string): FileArea {
@@ -121,25 +190,30 @@ export function classifyFile(filePath: string, extension: string): FileArea {
 }
 
 async function collectProjectStats(): Promise<ProjectStats> {
-	const exclude = '**/{node_modules,.git,.venv,venv,__pycache__,out,dist,build,.vscode-test}/**';
+	const exclude = '**/{node_modules,bower_components,vendor,.git,.svn,.hg,.venv,venv,__pycache__,.pytest_cache,.mypy_cache,out,dist,build,target,obj,.gradle,.idea,.vs,.vscode-test,coverage,.next,.nuxt,.svelte-kit,.turbo,.terraform}/**';
 	const fileUris = await vscode.workspace.findFiles('**/*', exclude);
 	const files: FileStats[] = [];
 
 	for (const uri of fileUris) {
-		const name = uri.path.split('/').pop() ?? uri.fsPath;
-		if (isSensitiveFile(uri.path)) {
+		const relativePath = vscode.workspace.asRelativePath(uri, false);
+		const name = relativePath.split(/[\\/]/).pop() ?? uri.fsPath;
+		if (isSensitiveFile(relativePath) || isGeneratedFile(relativePath)) {
 			continue;
 		}
 
 		try {
 			const content = await vscode.workspace.fs.readFile(uri);
+			if (looksBinary(content)) {
+				continue;
+			}
+
 			const extension = name.includes('.') && !name.startsWith('.')
 				? `.${name.split('.').pop()?.toLowerCase()}`
 				: '[no extension]';
 			files.push({
 				name,
 				extension,
-				area: classifyFile(uri.path, extension),
+				area: classifyFile(relativePath, extension),
 				lines: countLines(new TextDecoder().decode(content)),
 			});
 		} catch {
