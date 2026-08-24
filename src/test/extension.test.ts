@@ -38,6 +38,7 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('certs/server.jks'), true);
 		assert.strictEqual(isSensitiveFile('deployment.tfvars'), true);
 		assert.strictEqual(isSensitiveFile('target/App.class'), true);
+		assert.strictEqual(isSensitiveFile('documents/report.pdf'), true);
 		assert.strictEqual(isSensitiveFile('src/.idea/workspace.xml'), true);
 		assert.strictEqual(isSensitiveFile('local.env'), true);
 		assert.strictEqual(isSensitiveFile('gcp-credentials.json'), true);

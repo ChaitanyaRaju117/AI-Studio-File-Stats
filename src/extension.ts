@@ -74,6 +74,7 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCaseName.endsWith('.truststore')
 		|| lowerCaseName.endsWith('.tfvars')
 		|| lowerCaseName.endsWith('.class')
+		|| lowerCaseName.endsWith('.pdf')
 		|| lowerCaseName.endsWith('.sqlite')
 		|| lowerCaseName.endsWith('.sqlite3')
 		|| lowerCaseName.endsWith('.db')
@@ -168,11 +169,11 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 		}
 		const groupsHtml = [...fileGroups.entries()]
 			.sort(([first], [second]) => first.localeCompare(second))
-			.map(([extension, files]) => `<section><h3>${escapeHtml(extension)} <span>${files.length}</span></h3><ul>${files
+			.map(([extension, files]) => `<details class="file-group" open><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
 				.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
-				.join('')}</ul></section>`)
+				.join('')}</ul></details>`)
 			.join('');
-		return `<article><h2>${area} <span>${areaFiles.length} files / ${areaLines} lines</span></h2>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
+		return `<article class="area" data-area="${area.toLowerCase()}"><div class="area-heading"><h2>${area}</h2><span>${areaFiles.length} files / ${areaLines} lines</span></div>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
 	}).join('');
 
 	panel.webview.html = `<!DOCTYPE html>
@@ -181,28 +182,74 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); padding: 20px; }
-h1 { font-size: 24px; margin: 0 0 20px; }
-h2 { border-bottom: 1px solid var(--vscode-panel-border); font-size: 14px; margin: 28px 0 8px; padding-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }
-h3 { font-size: 13px; margin: 16px 0 6px; }
-h2 span { float: right; opacity: .7; }
-h3 span { float: right; opacity: .7; }
-.summary { display: flex; gap: 12px; flex-wrap: wrap; }
-.metric { border: 1px solid var(--vscode-panel-border); padding: 14px; min-width: 130px; }
-.metric strong { display: block; font-size: 28px; color: var(--vscode-textLink-foreground); }
-ul { list-style: none; padding: 0; margin: 0; }
-li { border-bottom: 1px solid var(--vscode-panel-border); display: flex; gap: 16px; justify-content: space-between; padding: 8px 0; }
-li strong { color: var(--vscode-textPreformat-foreground); }
-.empty { opacity: .7; }
+* { box-sizing: border-box; }
+body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 32px clamp(18px, 5vw, 64px); }
+main { max-width: 980px; margin: 0 auto; }
+.topbar { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 26px; }
+h1 { font-size: 26px; margin: 0; }
+.subtitle { color: var(--vscode-descriptionForeground); margin: 4px 0 0; }
+.controls { display: flex; gap: 8px; margin-bottom: 18px; }
+input, select { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); color: var(--vscode-input-foreground); font: inherit; padding: 8px 10px; }
+input { flex: 1; min-width: 180px; }
+select { min-width: 130px; }
+.summary { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 28px; }
+.metric { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); padding: 16px 18px; }
+.metric strong { display: block; font-size: 30px; color: var(--vscode-textLink-foreground); }
+.section-title { font-size: 14px; letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
+.area { border: 1px solid var(--vscode-panel-border); margin: 12px 0; padding: 0 16px 12px; }
+.area-heading { align-items: baseline; border-bottom: 1px solid var(--vscode-panel-border); display: flex; justify-content: space-between; }
+.area-heading h2 { font-size: 16px; margin: 14px 0 10px; }
+.area-heading span, .group-count { color: var(--vscode-descriptionForeground); font-size: 12px; }
+details { border-bottom: 1px solid var(--vscode-panel-border); }
+details:last-child { border-bottom: 0; }
+summary { cursor: pointer; display: flex; justify-content: space-between; list-style: none; padding: 11px 2px; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: '›'; display: inline-block; margin-right: 8px; transition: transform .15s ease; }
+details[open] summary::before { transform: rotate(90deg); }
+summary > span:first-of-type { flex: 1; }
+ul { list-style: none; margin: 0; padding: 0 0 4px 18px; }
+li { display: flex; gap: 16px; justify-content: space-between; overflow-wrap: anywhere; padding: 7px 0; }
+li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; }
+.empty { color: var(--vscode-descriptionForeground); }
+@media (max-width: 600px) { .topbar { align-items: start; flex-direction: column; } .summary { grid-template-columns: 1fr; } .controls { flex-direction: column; } }
 </style>
 </head>
 <body>
-<h1>Project Statistics</h1>
+<main>
+<div class="topbar"><div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div></div>
+<div class="controls"><input id="search" type="search" placeholder="Search files..." aria-label="Search files"><select id="area-filter" aria-label="Filter by area"><option value="all">All areas</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></div>
 <div class="summary">
 <div class="metric"><strong>${stats.files.length}</strong>Total files</div>
 <div class="metric"><strong>${stats.totalLines}</strong>Total lines</div>
 </div>
+<h2 class="section-title">Files</h2>
 ${areaHtml}
+</main>
+<script>
+const search = document.getElementById('search');
+const areaFilter = document.getElementById('area-filter');
+function filterFiles() {
+	const query = search.value.toLowerCase();
+	const area = areaFilter.value;
+	document.querySelectorAll('.area').forEach((areaElement) => {
+		const matchesArea = area === 'all' || areaElement.dataset.area === area;
+		let visibleFiles = 0;
+		areaElement.querySelectorAll('.file-group').forEach((group) => {
+			let groupVisible = 0;
+			group.querySelectorAll('li').forEach((file) => {
+				const visible = matchesArea && file.textContent.toLowerCase().includes(query);
+				file.hidden = !visible;
+				if (visible) groupVisible++;
+			});
+			group.hidden = groupVisible === 0;
+			if (groupVisible > 0) visibleFiles += groupVisible;
+		});
+		areaElement.hidden = visibleFiles === 0;
+	});
+}
+search.addEventListener('input', filterFiles);
+areaFilter.addEventListener('change', filterFiles);
+</script>
 </body>
 </html>`;
 }
