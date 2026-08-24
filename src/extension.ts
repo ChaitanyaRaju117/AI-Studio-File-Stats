@@ -14,8 +14,11 @@ export function countLines(content: string): number {
 interface FileStats {
 	name: string;
 	extension: string;
+	area: FileArea;
 	lines: number;
 }
+
+export type FileArea = 'Frontend' | 'Backend' | 'Other';
 
 interface ProjectStats {
 	files: FileStats[];
@@ -27,13 +30,30 @@ let statisticsPanel: vscode.WebviewPanel | undefined;
 export function isSensitiveFile(filePath: string): boolean {
 	const lowerCasePath = filePath.toLowerCase().replaceAll('\\', '/');
 	const lowerCaseName = lowerCasePath.split('/').pop() ?? lowerCasePath;
+	const sensitiveName = /(config|configuration|secret|secrets|credential|credentials|password|passwd|token|auth|private|connection|apikey|api-key|key)/;
+	const sensitiveDirectory = /(^|\/)(config|configs|secrets|credentials|private|certificates|keys|target|build|\.gradle|\.idea)(\/|$)/;
 	return lowerCaseName === '.dockerignore'
 		|| lowerCaseName === '.env'
+		|| lowerCaseName.endsWith('.env')
 		|| lowerCaseName.startsWith('.env.')
 		|| lowerCaseName === '.gitignore'
 		|| lowerCaseName === '.npmrc'
 		|| lowerCaseName === '.pypirc'
 		|| lowerCaseName === '.yarnrc'
+		|| lowerCaseName === 'application.properties'
+		|| /^application-.*\.properties$/.test(lowerCaseName)
+		|| lowerCaseName === 'application.yml'
+		|| lowerCaseName === 'application.yaml'
+		|| lowerCaseName === 'secrets.properties'
+		|| lowerCaseName === 'secrets.yml'
+		|| lowerCaseName === 'secrets.yaml'
+		|| lowerCaseName === 'credentials.properties'
+		|| lowerCaseName === 'credentials.yml'
+		|| lowerCaseName === 'credentials.yaml'
+		|| lowerCaseName === 'aws.properties'
+		|| lowerCaseName === 'gcp-credentials.json'
+		|| lowerCaseName === 'azure-credentials.json'
+		|| lowerCaseName === 'kubeconfig'
 		|| lowerCaseName === 'dockerfile'
 		|| lowerCaseName.startsWith('dockerfile.')
 		|| lowerCaseName.startsWith('docker-compose.')
@@ -49,6 +69,11 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCaseName.endsWith('.pfx')
 		|| lowerCaseName.endsWith('.crt')
 		|| lowerCaseName.endsWith('.cer')
+		|| lowerCaseName.endsWith('.jks')
+		|| lowerCaseName.endsWith('.keystore')
+		|| lowerCaseName.endsWith('.truststore')
+		|| lowerCaseName.endsWith('.tfvars')
+		|| lowerCaseName.endsWith('.class')
 		|| lowerCaseName.endsWith('.sqlite')
 		|| lowerCaseName.endsWith('.sqlite3')
 		|| lowerCaseName.endsWith('.db')
@@ -59,7 +84,31 @@ export function isSensitiveFile(filePath: string): boolean {
 		|| lowerCasePath.includes('/.aws/credentials')
 		|| lowerCasePath.includes('/.aws/config')
 		|| lowerCasePath.includes('/.kube/config')
+		|| sensitiveName.test(lowerCaseName)
+		|| sensitiveDirectory.test(lowerCasePath)
 		|| lowerCaseName.endsWith('.lock');
+}
+
+export function classifyFile(filePath: string, extension: string): FileArea {
+	const normalizedPath = filePath.toLowerCase().replaceAll('\\', '/');
+	const frontendDirectory = /(^|\/)(frontend|front-end|client|web|ui|public|pages|components)(\/|$)/;
+	const backendDirectory = /(^|\/)(backend|back-end|server|api|services|controllers|routes)(\/|$)/;
+	const frontendExtension = new Set(['.css', '.scss', '.sass', '.less', '.html', '.htm', '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.astro']);
+	const backendExtension = new Set(['.java', '.py', '.rb', '.php', '.c', '.cpp', '.cc', '.h', '.hpp', '.go', '.rs', '.kt', '.kts', '.cs', '.swift']);
+
+	if (frontendDirectory.test(normalizedPath)) {
+		return 'Frontend';
+	}
+	if (backendDirectory.test(normalizedPath)) {
+		return 'Backend';
+	}
+	if (frontendExtension.has(extension)) {
+		return 'Frontend';
+	}
+	if (backendExtension.has(extension)) {
+		return 'Backend';
+	}
+	return 'Other';
 }
 
 async function collectProjectStats(): Promise<ProjectStats> {
@@ -69,7 +118,7 @@ async function collectProjectStats(): Promise<ProjectStats> {
 
 	for (const uri of fileUris) {
 		const name = uri.path.split('/').pop() ?? uri.fsPath;
-		if (isSensitiveFile(name)) {
+		if (isSensitiveFile(uri.path)) {
 			continue;
 		}
 
@@ -81,6 +130,7 @@ async function collectProjectStats(): Promise<ProjectStats> {
 			files.push({
 				name,
 				extension,
+				area: classifyFile(uri.path, extension),
 				lines: countLines(new TextDecoder().decode(content)),
 			});
 		} catch {
@@ -106,19 +156,24 @@ function escapeHtml(value: string): string {
 
 async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 	const stats = await collectProjectStats();
-	const fileGroups = new Map<string, FileStats[]>();
-	for (const file of stats.files) {
-		const group = fileGroups.get(file.extension) ?? [];
-		group.push(file);
-		fileGroups.set(file.extension, group);
-	}
-	const groupsHtml = [...fileGroups.entries()]
-		.sort(([first], [second]) => first.localeCompare(second))
-		.map(([extension, files]) => `<section><h2>${escapeHtml(extension)} <span>${files.length}</span></h2><ul>${files
-			.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
-			.join('')}</ul></section>`)
-		.join('');
-	const content = groupsHtml || '<p class="empty">No files found.</p>';
+	const areas: FileArea[] = ['Frontend', 'Backend', 'Other'];
+	const areaHtml = areas.map((area) => {
+		const areaFiles = stats.files.filter((file) => file.area === area);
+		const areaLines = areaFiles.reduce((total, file) => total + file.lines, 0);
+		const fileGroups = new Map<string, FileStats[]>();
+		for (const file of areaFiles) {
+			const group = fileGroups.get(file.extension) ?? [];
+			group.push(file);
+			fileGroups.set(file.extension, group);
+		}
+		const groupsHtml = [...fileGroups.entries()]
+			.sort(([first], [second]) => first.localeCompare(second))
+			.map(([extension, files]) => `<section><h3>${escapeHtml(extension)} <span>${files.length}</span></h3><ul>${files
+				.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
+				.join('')}</ul></section>`)
+			.join('');
+		return `<article><h2>${area} <span>${areaFiles.length} files / ${areaLines} lines</span></h2>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
+	}).join('');
 
 	panel.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -129,7 +184,9 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); padding: 20px; }
 h1 { font-size: 24px; margin: 0 0 20px; }
 h2 { border-bottom: 1px solid var(--vscode-panel-border); font-size: 14px; margin: 28px 0 8px; padding-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }
+h3 { font-size: 13px; margin: 16px 0 6px; }
 h2 span { float: right; opacity: .7; }
+h3 span { float: right; opacity: .7; }
 .summary { display: flex; gap: 12px; flex-wrap: wrap; }
 .metric { border: 1px solid var(--vscode-panel-border); padding: 14px; min-width: 130px; }
 .metric strong { display: block; font-size: 28px; color: var(--vscode-textLink-foreground); }
@@ -145,7 +202,7 @@ li strong { color: var(--vscode-textPreformat-foreground); }
 <div class="metric"><strong>${stats.files.length}</strong>Total files</div>
 <div class="metric"><strong>${stats.totalLines}</strong>Total lines</div>
 </div>
-${content}
+${areaHtml}
 </body>
 </html>`;
 }
