@@ -2,7 +2,7 @@
   "name": "python-project-statistics",
   "displayName": "aicount",
   "publisher": "chaitanyarajuBahatam",
-  "description": "Counts files and lines by file type in your workspace",
+  "description": "Shows workspace file and line counts in the aicount sidebar, with a full report and CSV export",
   "version": "0.0.8",
   "icon": "media/icon.png",
   "engines": {

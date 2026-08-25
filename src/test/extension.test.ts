@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
-import { buildProjectStatsCsv, classifyFile, countLines, isGeneratedFile, isSensitiveFile, type ProjectStats } from '../extension';
+import { buildCsvDownloadFileName, buildProjectStatsCsv, classifyFile, countLines, isGeneratedFile, isSensitiveFile, type ProjectStats } from '../extension';
 
 suite('Extension Test Suite', () => {
 	test('Sample test', () => {
@@ -232,5 +232,21 @@ suite('Extension Test Suite', () => {
 		assert.ok(!csv.includes('app/reasoning'));
 		assert.ok(!csv.includes('Frontend'));
 		assert.ok(!csv.includes('Backend'));
+	});
+
+	test('names each CSV export with the project, date, and time', () => {
+		const now = new Date(2026, 7, 25, 19, 14, 32);
+		assert.strictEqual(
+			buildCsvDownloadFileName('AI_Automation_Advisor', now),
+			'AI_Automation_Advisor_AIStudioFileStats_2026-08-25_19_14_32.csv',
+		);
+		assert.strictEqual(
+			buildCsvDownloadFileName('my project: v2', now),
+			'my_project_v2_AIStudioFileStats_2026-08-25_19_14_32.csv',
+		);
+		assert.strictEqual(
+			buildCsvDownloadFileName('', now),
+			'Project_AIStudioFileStats_2026-08-25_19_14_32.csv',
+		);
 	});
 });

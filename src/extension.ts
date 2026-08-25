@@ -280,6 +280,21 @@ function formatCount(value: number): string {
 	return value.toLocaleString('en-US');
 }
 
+export function sanitizeCsvProjectName(name: string): string {
+	const cleaned = name
+		.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+		.replace(/\s+/g, '_')
+		.replace(/_+/g, '_')
+		.replace(/^[_]+|[_]+$/g, '');
+	return cleaned || 'Project';
+}
+
+export function buildCsvDownloadFileName(projectName: string, now = new Date()): string {
+	const pad2 = (value: number) => String(value).padStart(2, '0');
+	const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+	return `${sanitizeCsvProjectName(projectName)}_AIStudioFileStats_${date}_${pad2(now.getHours())}_${pad2(now.getMinutes())}_${pad2(now.getSeconds())}.csv`;
+}
+
 export function buildProjectStatsCsv(stats: ProjectStats): string {
 	const rows = [
 		`Total Files,${stats.files.length}`,
@@ -383,6 +398,15 @@ const vscode = acquireVsCodeApi();
 const search = document.getElementById('search');
 const sortBy = document.getElementById('sort-by');
 const csvContent = ${JSON.stringify(csvContent)};
+const csvProjectName = ${JSON.stringify(sanitizeCsvProjectName(vscode.workspace.name ?? 'Project'))};
+function pad2(value) {
+	return String(value).padStart(2, '0');
+}
+function csvDownloadFileName() {
+	const now = new Date();
+	const date = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+	return csvProjectName + '_AIStudioFileStats_' + date + '_' + pad2(now.getHours()) + '_' + pad2(now.getMinutes()) + '_' + pad2(now.getSeconds()) + '.csv';
+}
 function matchScore(row, query) {
 	const name = row.dataset.name || '';
 	if (!query) return 4;
@@ -443,7 +467,7 @@ document.getElementById('download-csv').addEventListener('click', () => {
 	const url = URL.createObjectURL(blob);
 	const link = document.createElement('a');
 	link.href = url;
-	link.download = 'project-statistics.csv';
+	link.download = csvDownloadFileName();
 	link.click();
 	URL.revokeObjectURL(url);
 });
