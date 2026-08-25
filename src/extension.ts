@@ -7,8 +7,7 @@ export function countLines(content: string): number {
 		return 0;
 	}
 
-	const lines = content.split(/\r\n|\r|\n/);
-	return content.endsWith('\n') || content.endsWith('\r') ? lines.length - 1 : lines.length;
+	return content.split(/\r\n|\r|\n/).length;
 }
 
 export interface FileStats {
@@ -578,14 +577,34 @@ document.getElementById('open-report')?.addEventListener('click', () => {
 </html>`;
 }
 
-const INSTALL_PROMPT_KEY = 'aicount.hasShownInstallWelcome';
+function welcomeMarkerUri(context: vscode.ExtensionContext): vscode.Uri {
+	return vscode.Uri.joinPath(context.extensionUri, '.welcome-shown');
+}
+
+async function hasShownWelcomeForThisInstall(context: vscode.ExtensionContext): Promise<boolean> {
+	try {
+		await vscode.workspace.fs.stat(welcomeMarkerUri(context));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function markWelcomeShown(context: vscode.ExtensionContext): Promise<void> {
+	try {
+		await vscode.workspace.fs.writeFile(welcomeMarkerUri(context), new TextEncoder().encode('1'));
+	} catch {
+		// Ignore if the install folder is not writable.
+	}
+}
 
 async function openAicountSidebar(): Promise<void> {
 	await vscode.commands.executeCommand('workbench.view.extension.aicount');
 }
 
 async function showInstallPrompt(context: vscode.ExtensionContext): Promise<void> {
-	if (context.globalState.get(INSTALL_PROMPT_KEY)) {
+	const isDevelopment = context.extensionMode === vscode.ExtensionMode.Development;
+	if (!isDevelopment && await hasShownWelcomeForThisInstall(context)) {
 		return;
 	}
 
@@ -593,12 +612,14 @@ async function showInstallPrompt(context: vscode.ExtensionContext): Promise<void
 	const close = { title: 'Close', isCloseAffordance: true };
 	const choice = await vscode.window.showInformationMessage(
 		'aicount is installed. Do you want to see the project structure?',
-		{ modal: true, detail: 'Open the report now, or use the aicount icon in the left sidebar later. This message is shown only once.' },
+		{ modal: true, detail: 'Open the report now, or use the aicount icon in the left sidebar later. This message is shown once per install.' },
 		open,
 		close,
 	);
 
-	await context.globalState.update(INSTALL_PROMPT_KEY, true);
+	if (!isDevelopment) {
+		await markWelcomeShown(context);
+	}
 
 	if (choice === open) {
 		await openAicountSidebar();

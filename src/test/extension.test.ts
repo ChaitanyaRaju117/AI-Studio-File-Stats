@@ -10,10 +10,11 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
 	});
 
-	test('counts lines without treating a trailing newline as an extra line', () => {
+	test('counts every line including a trailing blank line', () => {
 		assert.strictEqual(countLines(''), 0);
-		assert.strictEqual(countLines('first\nsecond\n'), 2);
+		assert.strictEqual(countLines('first\nsecond\n'), 3);
 		assert.strictEqual(countLines('first\r\nsecond'), 2);
+		assert.strictEqual(countLines('first\n\n'), 3);
 	});
 
 	test('excludes secrets that are shared across every ecosystem', () => {
