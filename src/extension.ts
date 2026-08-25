@@ -280,64 +280,16 @@ function formatCount(value: number): string {
 	return value.toLocaleString('en-US');
 }
 
-function getWorkbookExtensionLabel(extension: string): string {
-	if (extension === '[no extension]') {
-		return 'NO EXTENSION';
-	}
-
-	return extension.replace(/^\./, '').toUpperCase();
-}
-
-function groupProjectFiles(stats: ProjectStats): Array<{ extension: string; files: FileStats[]; totalLines: number }> {
-	const fileGroups = new Map<string, FileStats[]>();
-	for (const file of stats.files) {
-		const group = fileGroups.get(file.extension) ?? [];
-		group.push(file);
-		fileGroups.set(file.extension, group);
-	}
-
-	return [...fileGroups.entries()]
-		.sort(([first], [second]) => first.localeCompare(second))
-		.map(([extension, files]) => ({
-			extension,
-			files: [...files].sort((first, second) => fileDisplayPath(first).localeCompare(fileDisplayPath(second))),
-			totalLines: files.reduce((total, file) => total + file.lines, 0),
-		}));
-}
-
 export function buildProjectStatsCsv(stats: ProjectStats): string {
-	const rows: string[] = [];
-	const groups = groupProjectFiles(stats);
-	const fileTypeCount = new Set(stats.files.map((file) => file.extension)).size;
-	const projectName = vscode.workspace.name ?? 'Project';
-
-	rows.push('PROJECT STATISTICS REPORT');
-	rows.push('');
-	rows.push('Project Name,Value');
-	rows.push(`Project Name,${escapeCsvCell(projectName)}`);
-	rows.push(`Total Files,${stats.files.length}`);
-	rows.push(`Total Lines,${stats.totalLines}`);
-	rows.push(`File Types,${fileTypeCount}`);
-	rows.push('');
-	rows.push('FILE TYPE SUMMARY');
-	rows.push('File Type,Number of Files,Total Lines');
-
-	for (const group of groups) {
-		rows.push(`${escapeCsvCell(getWorkbookExtensionLabel(group.extension))},${group.files.length},${group.totalLines}`);
+	const rows = [
+		`Total Files,${stats.files.length}`,
+		`Total Lines,${stats.totalLines}`,
+		'',
+		'Name,No. of lines',
+	];
+	for (const file of stats.files) {
+		rows.push(`${escapeCsvCell(file.name)},${file.lines}`);
 	}
-
-	rows.push('');
-	rows.push('DETAILED FILE BREAKDOWN');
-
-	for (const group of groups) {
-		rows.push(`${escapeCsvCell(`${getWorkbookExtensionLabel(group.extension)} FILES - ${group.files.length} FILE${group.files.length === 1 ? '' : 'S'}`)},,`);
-		rows.push('File,Lines,');
-		for (const file of group.files) {
-			rows.push(`${escapeCsvCell(fileDisplayPath(file))},${file.lines},`);
-		}
-		rows.push('');
-	}
-
 	return rows.join('\r\n');
 }
 async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {

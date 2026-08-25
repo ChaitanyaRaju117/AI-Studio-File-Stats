@@ -209,33 +209,28 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(classifyFile('README.md', '.md'), 'Other');
 	});
 
-	test('builds a detailed CSV report from the displayed stats data', () => {
+	test('builds a CSV of filenames and line counts only', () => {
 		const stats: ProjectStats = {
 			files: [
-				{ name: 'package-lock.json', directory: '', extension: '.json', area: 'Frontend', lines: 3300 },
+				{ name: 'classifier.py', directory: 'app/reasoning', extension: '.py', area: 'Backend', lines: 326 },
 				{ name: 'package.json', directory: '', extension: '.json', area: 'Frontend', lines: 27 },
-				{ name: 'tsconfig.json', directory: '', extension: '.json', area: 'Frontend', lines: 21 },
-				{ name: 'index.html', directory: '', extension: '.html', area: 'Frontend', lines: 18 },
-				{ name: 'styles.css', directory: '', extension: '.css', area: 'Frontend', lines: 42 },
+				{ name: 'styles.css', directory: 'ui', extension: '.css', area: 'Frontend', lines: 42 },
 			],
-			totalLines: 3408,
+			totalLines: 395,
 		};
 
 		const csv = buildProjectStatsCsv(stats);
-		assert.ok(csv.startsWith('PROJECT STATISTICS REPORT'));
-		assert.ok(csv.includes('Project Name,Value'));
-		assert.ok(csv.includes('Total Files,5'));
-		assert.ok(csv.includes('Total Lines,3408'));
-		assert.ok(csv.includes('File Types,3'));
-		assert.ok(csv.includes('FILE TYPE SUMMARY'));
-		assert.ok(csv.includes('File Type,Number of Files,Total Lines'));
-		assert.ok(csv.includes('CSS,1,42'));
-		assert.ok(csv.includes('HTML,1,18'));
-		assert.ok(csv.includes('JSON,3,3348'));
-		assert.ok(csv.includes('DETAILED FILE BREAKDOWN'));
-		assert.ok(csv.includes('JSON FILES - 3 FILES'));
-		assert.ok(csv.includes('File,Lines,'));
-		assert.ok(csv.includes('package-lock.json,3300,'));
-		assert.ok(!csv.includes('Download XLSX'));
+		assert.strictEqual(csv, [
+			'Total Files,3',
+			'Total Lines,395',
+			'',
+			'Name,No. of lines',
+			'classifier.py,326',
+			'package.json,27',
+			'styles.css,42',
+		].join('\r\n'));
+		assert.ok(!csv.includes('app/reasoning'));
+		assert.ok(!csv.includes('Frontend'));
+		assert.ok(!csv.includes('Backend'));
 	});
 });
