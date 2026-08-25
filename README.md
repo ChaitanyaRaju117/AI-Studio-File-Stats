@@ -10,7 +10,7 @@ After you install it, a popup asks whether you want to see the project structure
 - Adds an **aicount** icon on the left Activity Bar. That sidebar shows total files, total lines, and **Open full report**.
 - Opens the full report in a **Project Statistics** editor tab with serial number, file name, and line count.
 - Lets you search files, sort by name or line count, and refresh the scan.
-- Exports a CSV with total files, total lines, each file name, and its line count. Each download uses a unique name: `{project}_AIStudioFileStats_{date}_{hour}_{min}_{sec}.csv`.
+- Exports a CSV with total files, total lines, each file name, and its line count. Each download uses a unique name: `{project}_AIStudioFileStats_{YYYYMMDD}_{HHMMSS}.csv`.
 - Counts every physical line, including blank lines and a trailing blank line at the end of a file.
 - Skips dependency, version-control, virtual-environment, and cache folders such as `node_modules`, `.git`, and `.venv`.
 - Does not read or display sensitive files such as environment, Docker, Git, or lock files.

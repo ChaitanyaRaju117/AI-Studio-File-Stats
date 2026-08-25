@@ -291,8 +291,9 @@ export function sanitizeCsvProjectName(name: string): string {
 
 export function buildCsvDownloadFileName(projectName: string, now = new Date()): string {
 	const pad2 = (value: number) => String(value).padStart(2, '0');
-	const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-	return `${sanitizeCsvProjectName(projectName)}_AIStudioFileStats_${date}_${pad2(now.getHours())}_${pad2(now.getMinutes())}_${pad2(now.getSeconds())}.csv`;
+	const date = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`;
+	const time = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
+	return `${sanitizeCsvProjectName(projectName)}_AIStudioFileStats_${date}_${time}.csv`;
 }
 
 export function buildProjectStatsCsv(stats: ProjectStats): string {
@@ -404,8 +405,9 @@ function pad2(value) {
 }
 function csvDownloadFileName() {
 	const now = new Date();
-	const date = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
-	return csvProjectName + '_AIStudioFileStats_' + date + '_' + pad2(now.getHours()) + '_' + pad2(now.getMinutes()) + '_' + pad2(now.getSeconds()) + '.csv';
+	const date = String(now.getFullYear()) + pad2(now.getMonth() + 1) + pad2(now.getDate());
+	const time = pad2(now.getHours()) + pad2(now.getMinutes()) + pad2(now.getSeconds());
+	return csvProjectName + '_AIStudioFileStats_' + date + '_' + time + '.csv';
 }
 function matchScore(row, query) {
 	const name = row.dataset.name || '';

@@ -238,15 +238,15 @@ suite('Extension Test Suite', () => {
 		const now = new Date(2026, 7, 25, 19, 14, 32);
 		assert.strictEqual(
 			buildCsvDownloadFileName('AI_Automation_Advisor', now),
-			'AI_Automation_Advisor_AIStudioFileStats_2026-08-25_19_14_32.csv',
+			'AI_Automation_Advisor_AIStudioFileStats_20260825_191432.csv',
 		);
 		assert.strictEqual(
 			buildCsvDownloadFileName('my project: v2', now),
-			'my_project_v2_AIStudioFileStats_2026-08-25_19_14_32.csv',
+			'my_project_v2_AIStudioFileStats_20260825_191432.csv',
 		);
 		assert.strictEqual(
 			buildCsvDownloadFileName('', now),
-			'Project_AIStudioFileStats_2026-08-25_19_14_32.csv',
+			'Project_AIStudioFileStats_20260825_191432.csv',
 		);
 	});
 });
