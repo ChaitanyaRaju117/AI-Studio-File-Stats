@@ -45,7 +45,9 @@
         {
           "type": "webview",
           "id": "aicount.sidebar",
-          "name": "Project Statistics"
+          "name": "Project Statistics",
+          "visibility": "visible",
+          "retainContextWhenHidden": true
         }
       ]
     },

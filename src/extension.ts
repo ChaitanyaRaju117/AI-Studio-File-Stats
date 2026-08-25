@@ -645,23 +645,30 @@ document.getElementById('open-report')?.addEventListener('click', () => {
 </html>`;
 }
 
-const INSTALL_PROMPT_KEY = 'aicount.hasShownInstallPrompt';
+const INSTALL_PROMPT_KEY = 'aicount.hasShownInstallWelcome';
+
+async function openAicountSidebar(): Promise<void> {
+	await vscode.commands.executeCommand('workbench.view.extension.aicount');
+}
 
 async function showInstallPrompt(context: vscode.ExtensionContext): Promise<void> {
 	if (context.globalState.get(INSTALL_PROMPT_KEY)) {
 		return;
 	}
 
-	await context.globalState.update(INSTALL_PROMPT_KEY, true);
 	const open = { title: 'Open' };
 	const close = { title: 'Close', isCloseAffordance: true };
 	const choice = await vscode.window.showInformationMessage(
-		'aicount is installed. Open the full project report?',
-		{ modal: true, detail: 'You can also open it later from the aicount icon in the Activity Bar.' },
+		'aicount is installed. Do you want to see the project structure?',
+		{ modal: true, detail: 'Open the report now, or use the aicount icon in the left sidebar later. This message is shown only once.' },
 		open,
 		close,
 	);
+
+	await context.globalState.update(INSTALL_PROMPT_KEY, true);
+
 	if (choice === open) {
+		await openAicountSidebar();
 		await showStatisticsPanel(context);
 	}
 }
@@ -716,7 +723,9 @@ export function activate(context: vscode.ExtensionContext) {
 		disposable,
 		statisticsCommand,
 		refreshCommand,
-		vscode.window.registerWebviewViewProvider(StatisticsSidebarProvider.viewType, sidebarProvider),
+		vscode.window.registerWebviewViewProvider(StatisticsSidebarProvider.viewType, sidebarProvider, {
+			webviewOptions: { retainContextWhenHidden: true },
+		}),
 	);
 
 	void showInstallPrompt(context);
