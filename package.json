@@ -65,7 +65,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:coverage": "npm run compile && npm run lint && vscode-test --coverage --coverage-output coverage --coverage-reporter lcov"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
