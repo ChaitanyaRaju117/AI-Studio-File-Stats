@@ -3,7 +3,7 @@
   "displayName": "aicount",
   "publisher": "chaitanyarajuBahatam",
   "description": "Counts files and lines by file type in your workspace",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"
@@ -11,7 +11,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -22,8 +24,40 @@
       {
         "command": "poc.projectStatistics",
         "title": "Project Statistics"
+      },
+      {
+        "command": "poc.refreshSidebar",
+        "title": "Refresh Statistics",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aicount",
+          "title": "aicount",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "aicount": [
+        {
+          "type": "webview",
+          "id": "aicount.sidebar",
+          "name": "Project Statistics"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "poc.refreshSidebar",
+          "when": "view == aicount.sidebar",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

@@ -436,6 +436,140 @@ document.getElementById('download-csv').addEventListener('click', () => {
 </html>`;
 }
 
+class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
+	public static readonly viewType = 'aicount.sidebar';
+	private view?: vscode.WebviewView;
+
+	resolveWebviewView(webviewView: vscode.WebviewView): void {
+		this.view = webviewView;
+		webviewView.webview.options = { enableScripts: true };
+		webviewView.webview.onDidReceiveMessage((message: { type?: string }) => {
+			if (message.type === 'openReport') {
+				void vscode.commands.executeCommand('poc.projectStatistics');
+			}
+		});
+		void this.refresh();
+	}
+
+	async refresh(): Promise<void> {
+		if (!this.view) {
+			return;
+		}
+
+		if (!vscode.workspace.workspaceFolders?.length) {
+			this.view.webview.html = renderSidebarHtml({
+				hasWorkspace: false,
+				totalFiles: 0,
+				totalLines: 0,
+				frontend: 0,
+				backend: 0,
+				other: 0,
+			});
+			return;
+		}
+
+		const stats = await collectProjectStats();
+		this.view.webview.html = renderSidebarHtml({
+			hasWorkspace: true,
+			totalFiles: stats.files.length,
+			totalLines: stats.totalLines,
+			frontend: stats.files.filter((file) => file.area === 'Frontend').length,
+			backend: stats.files.filter((file) => file.area === 'Backend').length,
+			other: stats.files.filter((file) => file.area === 'Other').length,
+		});
+	}
+}
+
+function renderSidebarHtml(summary: {
+	hasWorkspace: boolean;
+	totalFiles: number;
+	totalLines: number;
+	frontend: number;
+	backend: number;
+	other: number;
+}): string {
+	const body = summary.hasWorkspace
+		? `<div class="metric"><strong>${summary.totalFiles}</strong>Total files</div>
+<div class="metric"><strong>${summary.totalLines}</strong>Total lines</div>
+<ul>
+<li><span>Frontend</span><strong>${summary.frontend}</strong></li>
+<li><span>Backend</span><strong>${summary.backend}</strong></li>
+<li><span>Other</span><strong>${summary.other}</strong></li>
+</ul>
+<button id="open-report" type="button">Open full report</button>`
+		: '<p class="empty">Open a project folder to view statistics.</p>';
+
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { color: var(--vscode-foreground); background: transparent; font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 12px; }
+.metric { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); margin-bottom: 8px; padding: 12px; }
+.metric strong { color: var(--vscode-textLink-foreground); display: block; font-size: 22px; }
+ul { list-style: none; margin: 12px 0; padding: 0; }
+li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--vscode-panel-border); }
+button { background: var(--vscode-button-background); border: 1px solid var(--vscode-button-border, transparent); color: var(--vscode-button-foreground); cursor: pointer; font: inherit; margin-top: 8px; padding: 8px 12px; width: 100%; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+.empty { color: var(--vscode-descriptionForeground); }
+</style>
+</head>
+<body>
+${body}
+<script>
+const vscode = acquireVsCodeApi();
+document.getElementById('open-report')?.addEventListener('click', () => {
+	vscode.postMessage({ type: 'openReport' });
+});
+</script>
+</body>
+</html>`;
+}
+
+const INSTALL_PROMPT_KEY = 'aicount.hasShownInstallPrompt';
+
+async function showInstallPrompt(context: vscode.ExtensionContext): Promise<void> {
+	if (context.globalState.get(INSTALL_PROMPT_KEY)) {
+		return;
+	}
+
+	await context.globalState.update(INSTALL_PROMPT_KEY, true);
+	const open = { title: 'Open' };
+	const close = { title: 'Close', isCloseAffordance: true };
+	const choice = await vscode.window.showInformationMessage(
+		'aicount is installed. Open the full project report?',
+		{ modal: true, detail: 'You can also open it later from the aicount icon in the Activity Bar.' },
+		open,
+		close,
+	);
+	if (choice === open) {
+		await showStatisticsPanel(context);
+	}
+}
+
+async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<void> {
+	if (!vscode.workspace.workspaceFolders?.length) {
+		vscode.window.showWarningMessage('Open a project folder to view project statistics.');
+		return;
+	}
+
+	if (statisticsPanel) {
+		statisticsPanel.reveal(vscode.ViewColumn.Active);
+		await renderStatistics(statisticsPanel);
+		return;
+	}
+
+	statisticsPanel = vscode.window.createWebviewPanel(
+		'poc.projectStatistics',
+		'Project Statistics',
+		vscode.ViewColumn.Active,
+		{ enableScripts: true },
+	);
+	statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
+	await renderStatistics(statisticsPanel);
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -444,37 +578,21 @@ export function activate(context: vscode.ExtensionContext) {
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "poc" is now active!');
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
+	const sidebarProvider = new StatisticsSidebarProvider();
 	const disposable = vscode.commands.registerCommand('poc.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
 		vscode.window.showInformationMessage('Hello World from poc!');
 	});
-	const statisticsCommand = vscode.commands.registerCommand('poc.projectStatistics', async () => {
-		if (!vscode.workspace.workspaceFolders?.length) {
-			vscode.window.showWarningMessage('Open a project folder to view project statistics.');
-			return;
-		}
+	const statisticsCommand = vscode.commands.registerCommand('poc.projectStatistics', () => showStatisticsPanel(context));
+	const refreshCommand = vscode.commands.registerCommand('poc.refreshSidebar', () => sidebarProvider.refresh());
 
-		if (statisticsPanel) {
-			statisticsPanel.reveal(vscode.ViewColumn.Active);
-			await renderStatistics(statisticsPanel);
-			return;
-		}
+	context.subscriptions.push(
+		disposable,
+		statisticsCommand,
+		refreshCommand,
+		vscode.window.registerWebviewViewProvider(StatisticsSidebarProvider.viewType, sidebarProvider),
+	);
 
-		statisticsPanel = vscode.window.createWebviewPanel(
-			'poc.projectStatistics',
-			'Project Statistics',
-			vscode.ViewColumn.Active,
-			{ enableScripts: true },
-		);
-		statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
-		await renderStatistics(statisticsPanel);
-	});
-
-	context.subscriptions.push(disposable, statisticsCommand);
+	void showInstallPrompt(context);
 }
 
 // This method is called when your extension is deactivated
