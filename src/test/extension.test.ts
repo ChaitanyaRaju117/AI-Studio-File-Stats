@@ -211,11 +211,11 @@ suite('Extension Test Suite', () => {
 	test('builds a detailed CSV report from the displayed stats data', () => {
 		const stats: ProjectStats = {
 			files: [
-				{ name: 'package-lock.json', extension: '.json', area: 'Frontend', lines: 3300 },
-				{ name: 'package.json', extension: '.json', area: 'Frontend', lines: 27 },
-				{ name: 'tsconfig.json', extension: '.json', area: 'Frontend', lines: 21 },
-				{ name: 'index.html', extension: '.html', area: 'Frontend', lines: 18 },
-				{ name: 'styles.css', extension: '.css', area: 'Frontend', lines: 42 },
+				{ name: 'package-lock.json', directory: '', extension: '.json', area: 'Frontend', lines: 3300 },
+				{ name: 'package.json', directory: '', extension: '.json', area: 'Frontend', lines: 27 },
+				{ name: 'tsconfig.json', directory: '', extension: '.json', area: 'Frontend', lines: 21 },
+				{ name: 'index.html', directory: '', extension: '.html', area: 'Frontend', lines: 18 },
+				{ name: 'styles.css', directory: '', extension: '.css', area: 'Frontend', lines: 42 },
 			],
 			totalLines: 3408,
 		};

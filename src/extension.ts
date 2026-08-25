@@ -13,6 +13,7 @@ export function countLines(content: string): number {
 
 export interface FileStats {
 	name: string;
+	directory: string;
 	extension: string;
 	area: FileArea;
 	lines: number;
@@ -26,6 +27,7 @@ export interface ProjectStats {
 }
 
 let statisticsPanel: vscode.WebviewPanel | undefined;
+let statisticsSidebar: StatisticsSidebarProvider | undefined;
 
 const SOURCE_CODE_EXTENSIONS = new Set([
 	'.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte', '.astro',
@@ -216,9 +218,19 @@ async function collectProjectStats(): Promise<ProjectStats> {
 	const files: FileStats[] = [];
 
 	for (const uri of fileUris) {
-		const relativePath = vscode.workspace.asRelativePath(uri, false);
-		const name = relativePath.split(/[\\/]/).pop() ?? uri.fsPath;
+		const relativePath = vscode.workspace.asRelativePath(uri, false).replaceAll('\\', '/');
+		const displayPath = vscode.workspace.asRelativePath(uri, true).replaceAll('\\', '/');
+		const separator = displayPath.lastIndexOf('/');
+		const name = separator === -1 ? displayPath : displayPath.slice(separator + 1);
+		const directory = separator === -1 ? '' : displayPath.slice(0, separator);
 		if (isSensitiveFile(relativePath) || isGeneratedFile(relativePath)) {
+			continue;
+		}
+
+		const extension = name.includes('.') && !name.startsWith('.')
+			? `.${name.split('.').pop()?.toLowerCase()}`
+			: '[no extension]';
+		if (extension === '[no extension]') {
 			continue;
 		}
 
@@ -228,11 +240,9 @@ async function collectProjectStats(): Promise<ProjectStats> {
 				continue;
 			}
 
-			const extension = name.includes('.') && !name.startsWith('.')
-				? `.${name.split('.').pop()?.toLowerCase()}`
-				: '[no extension]';
 			files.push({
 				name,
+				directory,
 				extension,
 				area: classifyFile(relativePath, extension),
 				lines: countLines(new TextDecoder().decode(content)),
@@ -243,9 +253,13 @@ async function collectProjectStats(): Promise<ProjectStats> {
 	}
 
 	return {
-		files: files.sort((first, second) => first.name.localeCompare(second.name)),
+		files: files.sort((first, second) => fileDisplayPath(first).localeCompare(fileDisplayPath(second))),
 		totalLines: files.reduce((total, file) => total + file.lines, 0),
 	};
+}
+
+function fileDisplayPath(file: FileStats): string {
+	return file.directory ? `${file.directory}/${file.name}` : file.name;
 }
 
 function escapeHtml(value: string): string {
@@ -261,6 +275,10 @@ function escapeHtml(value: string): string {
 function escapeCsvCell(value: string): string {
 	const escaped = value.replace(/"/g, '""');
 	return /[",\n]/.test(value) ? `"${escaped}"` : escaped;
+}
+
+function formatCount(value: number): string {
+	return value.toLocaleString('en-US');
 }
 
 function getWorkbookExtensionLabel(extension: string): string {
@@ -283,7 +301,7 @@ function groupProjectFiles(stats: ProjectStats): Array<{ extension: string; file
 		.sort(([first], [second]) => first.localeCompare(second))
 		.map(([extension, files]) => ({
 			extension,
-			files: [...files].sort((first, second) => first.name.localeCompare(second.name)),
+			files: [...files].sort((first, second) => fileDisplayPath(first).localeCompare(fileDisplayPath(second))),
 			totalLines: files.reduce((total, file) => total + file.lines, 0),
 		}));
 }
@@ -316,7 +334,7 @@ export function buildProjectStatsCsv(stats: ProjectStats): string {
 		rows.push(`${escapeCsvCell(`${getWorkbookExtensionLabel(group.extension)} FILES - ${group.files.length} FILE${group.files.length === 1 ? '' : 'S'}`)},,`);
 		rows.push('File,Lines,');
 		for (const file of group.files) {
-			rows.push(`${escapeCsvCell(file.name)},${file.lines},`);
+			rows.push(`${escapeCsvCell(fileDisplayPath(file))},${file.lines},`);
 		}
 		rows.push('');
 	}
@@ -324,7 +342,10 @@ export function buildProjectStatsCsv(stats: ProjectStats): string {
 	return rows.join('\r\n');
 }
 async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
-	const stats = await collectProjectStats();
+	const stats = await vscode.window.withProgress(
+		{ location: vscode.ProgressLocation.Notification, title: 'Analyzing project statistics...' },
+		() => collectProjectStats(),
+	);
 	const csvContent = buildProjectStatsCsv(stats);
 	const areas: FileArea[] = ['Frontend', 'Backend', 'Other'];
 	const areaHtml = areas.map((area) => {
@@ -338,8 +359,8 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 		}
 		const groupsHtml = [...fileGroups.entries()]
 			.sort(([first], [second]) => first.localeCompare(second))
-			.map(([extension, files]) => `<details class="file-group"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
-				.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
+			.map(([extension, files]) => `<details class="file-group" data-label="${escapeHtml(extension)}" data-files="${files.length}" data-lines="${files.reduce((total, file) => total + file.lines, 0)}"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
+				.map((file) => `<li data-name="${escapeHtml(file.name.toLowerCase())}" data-path="${escapeHtml(fileDisplayPath(file).toLowerCase())}"><span class="file-meta"><span class="file-name">${escapeHtml(file.name)}</span>${file.directory ? `<span class="file-dir">${escapeHtml(file.directory)}</span>` : ''}</span><strong>${file.lines} lines</strong></li>`)
 				.join('')}</ul></details>`)
 			.join('');
 		return `<article class="area" data-area="${area.toLowerCase()}"><div class="area-heading"><h2>${area}</h2><span>${areaFiles.length} files / ${areaLines} lines</span></div>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
@@ -352,23 +373,35 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 * { box-sizing: border-box; }
-body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 32px clamp(18px, 5vw, 64px); }
-main { max-width: 980px; margin: 0 auto; }
-.topbar { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 26px; }
-h1 { font-size: 26px; margin: 0; }
+body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 28px clamp(16px, 4vw, 48px) 48px; }
+main { max-width: 920px; margin: 0 auto; }
+.topbar { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 22px; }
+h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; margin: 0; }
 .subtitle { color: var(--vscode-descriptionForeground); margin: 4px 0 0; }
-.topbar-actions { display: flex; align-items: center; }
-.download-button { background: var(--vscode-button-background); border: 1px solid var(--vscode-button-border, transparent); color: var(--vscode-button-foreground); cursor: pointer; font: inherit; padding: 8px 14px; }
-.download-button:hover { background: var(--vscode-button-hoverBackground); }
-.controls { display: flex; gap: 8px; margin-bottom: 18px; }
-input, select { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); color: var(--vscode-input-foreground); font: inherit; padding: 8px 10px; }
-input { flex: 1; min-width: 180px; }
-select { min-width: 130px; }
+.topbar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.search-box { align-items: center; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 8px; display: flex; gap: 8px; min-width: 220px; padding: 0 12px; }
+.search-box svg, .ghost-button svg, .refresh-button svg { flex-shrink: 0; }
+.search-box input { background: transparent; border: 0; color: var(--vscode-input-foreground); flex: 1; font: inherit; min-width: 0; outline: none; padding: 9px 0; }
+.filter-box { position: relative; }
+.filter-box select { appearance: none; background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-foreground); cursor: pointer; font: inherit; padding: 9px 32px 9px 34px; }
+.filter-box svg { left: 10px; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); }
+.ghost-button, .refresh-button { align-items: center; border-radius: 8px; cursor: pointer; display: inline-flex; font: inherit; gap: 8px; padding: 9px 14px; }
+.ghost-button { background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); color: var(--vscode-foreground); }
+.ghost-button:hover { filter: brightness(1.12); }
+.refresh-button { background: var(--vscode-button-background); border: 1px solid var(--vscode-button-border, transparent); color: var(--vscode-button-foreground); }
+.refresh-button:hover { background: var(--vscode-button-hoverBackground); }
+.refresh-button:disabled { cursor: wait; opacity: 0.72; }
 .summary { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 28px; }
-.metric { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); padding: 16px 18px; }
-.metric strong { display: block; font-size: 30px; color: var(--vscode-textLink-foreground); }
-.section-title { font-size: 14px; letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
-.area { border: 1px solid var(--vscode-panel-border); margin: 12px 0; padding: 0 16px 12px; }
+.metric { align-items: center; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 12px; display: flex; gap: 14px; padding: 18px 20px; }
+.metric-icon { align-items: center; background: color-mix(in srgb, var(--vscode-textLink-foreground) 16%, transparent); border-radius: 10px; color: var(--vscode-textLink-foreground); display: flex; height: 42px; justify-content: center; width: 42px; }
+.metric strong { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.04em; }
+.metric span { color: var(--vscode-descriptionForeground); font-size: 13px; }
+.files-header { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 10px; }
+.files-header h2 { font-size: 16px; margin: 0; }
+.files-toolbar { align-items: center; display: flex; gap: 10px; }
+.files-toolbar label { align-items: center; color: var(--vscode-descriptionForeground); display: flex; font-size: 13px; gap: 8px; }
+.files-toolbar select { background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-foreground); font: inherit; padding: 7px 10px; }
+.area { border: 1px solid var(--vscode-panel-border); border-radius: 12px; margin: 12px 0; padding: 0 16px 12px; }
 .area-heading { align-items: baseline; border-bottom: 1px solid var(--vscode-panel-border); display: flex; justify-content: space-between; }
 .area-heading h2 { font-size: 16px; margin: 14px 0 10px; }
 .area-heading span, .group-count { color: var(--vscode-descriptionForeground); font-size: 12px; }
@@ -381,47 +414,132 @@ details[open] summary::before { transform: rotate(90deg); }
 summary > span:first-of-type { flex: 1; }
 ul { list-style: none; margin: 0; padding: 0 0 4px 18px; }
 li { display: flex; gap: 16px; justify-content: space-between; overflow-wrap: anywhere; padding: 7px 0; }
+li[hidden], .file-group[hidden], .area[hidden] { display: none !important; }
+.file-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.file-dir { color: var(--vscode-descriptionForeground); font-size: 12px; }
 li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; }
 .empty { color: var(--vscode-descriptionForeground); }
-@media (max-width: 600px) { .topbar { align-items: start; flex-direction: column; } .summary { grid-template-columns: 1fr; } .controls { flex-direction: column; } }
+@media (max-width: 760px) {
+	.topbar, .files-header { align-items: stretch; flex-direction: column; }
+	.topbar-actions, .files-toolbar { justify-content: stretch; }
+	.search-box, .filter-box, .filter-box select, .ghost-button, .refresh-button { width: 100%; }
+	.summary { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 <main>
-<div class="topbar"><div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div><div class="topbar-actions"><button id="download-csv" class="download-button" type="button">Download CSV</button></div></div>
-<div class="controls"><input id="search" type="search" placeholder="Search files..." aria-label="Search files"><select id="area-filter" aria-label="Filter by area"><option value="all">All areas</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></div>
-<div class="summary">
-<div class="metric"><strong>${stats.files.length}</strong>Total files</div>
-<div class="metric"><strong>${stats.totalLines}</strong>Total lines</div>
+<div class="topbar">
+	<div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div>
+	<div class="topbar-actions">
+		<label class="search-box"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-linecap="round"/></svg><input id="search" type="search" placeholder="Search files..." aria-label="Search files"></label>
+		<label class="filter-box"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12L9.5 9.2V13l-3 1.5V9.2L2 4z" stroke="currentColor" stroke-linejoin="round"/></svg><select id="area-filter" aria-label="Filter by area"><option value="all">Filter</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></label>
+		<button id="refresh" class="refresh-button" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.4-3.5M13 3.5V6h-2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>Refresh</button>
+	</div>
 </div>
-<h2 class="section-title">Files</h2>
+<div class="summary">
+	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 3h7l4 4v10a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 3.5 17V4.5A1.5 1.5 0 0 1 5 3z" stroke="currentColor"/><path d="M12 3v4h4" stroke="currentColor"/></svg></span><div><strong>${formatCount(stats.files.length)}</strong><span>Total files</span></div></div>
+	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 5L4 10l4 5M12 5l4 5-4 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong>${formatCount(stats.totalLines)}</strong><span>Total lines</span></div></div>
+</div>
+<div class="files-header">
+	<h2>Files</h2>
+	<div class="files-toolbar">
+		<label>Sort by: <select id="sort-by" aria-label="Sort files"><option value="type">File Type</option><option value="files">File count</option><option value="lines">Line count</option></select></label>
+		<button id="download-csv" class="ghost-button" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v7M5.5 7.5L8 10l2.5-2.5M3.5 13h9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>Export</button>
+	</div>
+</div>
 ${areaHtml}
 </main>
 <script>
+const vscode = acquireVsCodeApi();
 const search = document.getElementById('search');
 const areaFilter = document.getElementById('area-filter');
+const sortBy = document.getElementById('sort-by');
 const csvContent = ${JSON.stringify(csvContent)};
 function filterFiles() {
-	const query = search.value.toLowerCase();
+	const query = search.value.trim().toLowerCase();
 	const area = areaFilter.value;
 	document.querySelectorAll('.area').forEach((areaElement) => {
 		const matchesArea = area === 'all' || areaElement.dataset.area === area;
 		let visibleFiles = 0;
+		let bestAreaScore = 99;
 		areaElement.querySelectorAll('.file-group').forEach((group) => {
 			let groupVisible = 0;
-			group.querySelectorAll('li').forEach((file) => {
-				const visible = matchesArea && file.textContent.toLowerCase().includes(query);
+			let bestGroupScore = 99;
+			const files = [...group.querySelectorAll('li')];
+			files.forEach((file) => {
+				const name = file.dataset.name || '';
+				const path = file.dataset.path || '';
+				let score = 99;
+				if (!query) {
+					score = 4;
+				} else if (name === query || path === query || path.endsWith('/' + query)) {
+					score = 0;
+				} else if (name.startsWith(query)) {
+					score = 1;
+				} else if (name.includes(query)) {
+					score = 2;
+				} else if (path.includes(query)) {
+					score = 3;
+				}
+				const visible = matchesArea && score < 99;
 				file.hidden = !visible;
-				if (visible) groupVisible++;
+				file.dataset.score = String(score);
+				if (visible) {
+					groupVisible++;
+					bestGroupScore = Math.min(bestGroupScore, score);
+				}
 			});
+			files.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score) || (first.dataset.name || '').localeCompare(second.dataset.name || ''));
+			files.forEach((file) => file.parentElement.appendChild(file));
 			group.hidden = groupVisible === 0;
-			if (groupVisible > 0) visibleFiles += groupVisible;
+			group.open = query.length > 0 && groupVisible > 0;
+			group.dataset.score = String(bestGroupScore);
+			if (groupVisible > 0) {
+				visibleFiles += groupVisible;
+				bestAreaScore = Math.min(bestAreaScore, bestGroupScore);
+			}
 		});
+		const groups = [...areaElement.querySelectorAll('.file-group')];
+		if (query) {
+			groups.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score) || (first.dataset.label || '').localeCompare(second.dataset.label || ''));
+			groups.forEach((group) => areaElement.appendChild(group));
+		}
 		areaElement.hidden = visibleFiles === 0;
+		areaElement.dataset.score = String(bestAreaScore);
+	});
+	if (query) {
+		const areas = [...document.querySelectorAll('.area')];
+		areas.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score));
+		areas.forEach((areaElement) => areaElement.parentElement.appendChild(areaElement));
+	} else {
+		document.querySelectorAll('.file-group').forEach((group) => {
+			const files = [...group.querySelectorAll('li')];
+			files.sort((first, second) => (first.dataset.path || '').localeCompare(second.dataset.path || ''));
+			files.forEach((file) => file.parentElement.appendChild(file));
+		});
+		sortGroups();
+	}
+}
+function sortGroups() {
+	const mode = sortBy.value;
+	document.querySelectorAll('.area').forEach((areaElement) => {
+		const groups = [...areaElement.querySelectorAll('.file-group')];
+		groups.sort((first, second) => {
+			if (mode === 'lines') return Number(second.dataset.lines) - Number(first.dataset.lines);
+			if (mode === 'files') return Number(second.dataset.files) - Number(first.dataset.files);
+			return (first.dataset.label || '').localeCompare(second.dataset.label || '');
+		});
+		groups.forEach((group) => areaElement.appendChild(group));
 	});
 }
 search.addEventListener('input', filterFiles);
 areaFilter.addEventListener('change', filterFiles);
+sortBy.addEventListener('change', sortGroups);
+document.getElementById('refresh').addEventListener('click', (event) => {
+	event.currentTarget.disabled = true;
+	vscode.postMessage({ type: 'refresh' });
+});
 document.getElementById('download-csv').addEventListener('click', () => {
 	const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 	const url = URL.createObjectURL(blob);
@@ -566,6 +684,14 @@ async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<vo
 		vscode.ViewColumn.Active,
 		{ enableScripts: true },
 	);
+	statisticsPanel.webview.onDidReceiveMessage(async (message: { type?: string }) => {
+		if (message.type !== 'refresh' || !statisticsPanel) {
+			return;
+		}
+
+		await renderStatistics(statisticsPanel);
+		await statisticsSidebar?.refresh();
+	});
 	statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
 	await renderStatistics(statisticsPanel);
 }
@@ -579,6 +705,7 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "poc" is now active!');
 
 	const sidebarProvider = new StatisticsSidebarProvider();
+	statisticsSidebar = sidebarProvider;
 	const disposable = vscode.commands.registerCommand('poc.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from poc!');
 	});
