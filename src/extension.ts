@@ -337,7 +337,7 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 		}
 		const groupsHtml = [...fileGroups.entries()]
 			.sort(([first], [second]) => first.localeCompare(second))
-			.map(([extension, files]) => `<details class="file-group" open><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
+			.map(([extension, files]) => `<details class="file-group"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
 				.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
 				.join('')}</ul></details>`)
 			.join('');
