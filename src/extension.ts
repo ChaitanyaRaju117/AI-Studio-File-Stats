@@ -347,24 +347,12 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 		() => collectProjectStats(),
 	);
 	const csvContent = buildProjectStatsCsv(stats);
-	const areas: FileArea[] = ['Frontend', 'Backend', 'Other'];
-	const areaHtml = areas.map((area) => {
-		const areaFiles = stats.files.filter((file) => file.area === area);
-		const areaLines = areaFiles.reduce((total, file) => total + file.lines, 0);
-		const fileGroups = new Map<string, FileStats[]>();
-		for (const file of areaFiles) {
-			const group = fileGroups.get(file.extension) ?? [];
-			group.push(file);
-			fileGroups.set(file.extension, group);
-		}
-		const groupsHtml = [...fileGroups.entries()]
-			.sort(([first], [second]) => first.localeCompare(second))
-			.map(([extension, files]) => `<details class="file-group" data-label="${escapeHtml(extension)}" data-files="${files.length}" data-lines="${files.reduce((total, file) => total + file.lines, 0)}"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
-				.map((file) => `<li data-name="${escapeHtml(file.name.toLowerCase())}" data-path="${escapeHtml(fileDisplayPath(file).toLowerCase())}"><span class="file-meta"><span class="file-name">${escapeHtml(file.name)}</span>${file.directory ? `<span class="file-dir">${escapeHtml(file.directory)}</span>` : ''}</span><strong>${file.lines} lines</strong></li>`)
-				.join('')}</ul></details>`)
-			.join('');
-		return `<article class="area" data-area="${area.toLowerCase()}"><div class="area-heading"><h2>${area}</h2><span>${areaFiles.length} files / ${areaLines} lines</span></div>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
-	}).join('');
+	const rowsHtml = stats.files
+		.map((file) => `<tr data-name="${escapeHtml(file.name.toLowerCase())}" data-path="${escapeHtml(fileDisplayPath(file).toLowerCase())}" data-lines="${file.lines}"><td class="sno"></td><td class="file-name">${escapeHtml(file.name)}</td><td class="lines">${formatCount(file.lines)}</td></tr>`)
+		.join('');
+	const filesHtml = rowsHtml
+		? `<div class="table-wrap"><table class="file-table"><thead><tr><th>S.No</th><th>Name</th><th>No. of lines</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+		: '<p class="empty">No files found.</p>';
 
 	panel.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -382,9 +370,6 @@ h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; margin: 0; }
 .search-box { align-items: center; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 8px; display: flex; gap: 8px; min-width: 220px; padding: 0 12px; }
 .search-box svg, .ghost-button svg, .refresh-button svg { flex-shrink: 0; }
 .search-box input { background: transparent; border: 0; color: var(--vscode-input-foreground); flex: 1; font: inherit; min-width: 0; outline: none; padding: 9px 0; }
-.filter-box { position: relative; }
-.filter-box select { appearance: none; background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-foreground); cursor: pointer; font: inherit; padding: 9px 32px 9px 34px; }
-.filter-box svg { left: 10px; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); }
 .ghost-button, .refresh-button { align-items: center; border-radius: 8px; cursor: pointer; display: inline-flex; font: inherit; gap: 8px; padding: 9px 14px; }
 .ghost-button { background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); color: var(--vscode-foreground); }
 .ghost-button:hover { filter: brightness(1.12); }
@@ -401,28 +386,21 @@ h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; margin: 0; }
 .files-toolbar { align-items: center; display: flex; gap: 10px; }
 .files-toolbar label { align-items: center; color: var(--vscode-descriptionForeground); display: flex; font-size: 13px; gap: 8px; }
 .files-toolbar select { background: var(--vscode-input-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-foreground); font: inherit; padding: 7px 10px; }
-.area { border: 1px solid var(--vscode-panel-border); border-radius: 12px; margin: 12px 0; padding: 0 16px 12px; }
-.area-heading { align-items: baseline; border-bottom: 1px solid var(--vscode-panel-border); display: flex; justify-content: space-between; }
-.area-heading h2 { font-size: 16px; margin: 14px 0 10px; }
-.area-heading span, .group-count { color: var(--vscode-descriptionForeground); font-size: 12px; }
-details { border-bottom: 1px solid var(--vscode-panel-border); }
-details:last-child { border-bottom: 0; }
-summary { cursor: pointer; display: flex; justify-content: space-between; list-style: none; padding: 11px 2px; }
-summary::-webkit-details-marker { display: none; }
-summary::before { content: '›'; display: inline-block; margin-right: 8px; transition: transform .15s ease; }
-details[open] summary::before { transform: rotate(90deg); }
-summary > span:first-of-type { flex: 1; }
-ul { list-style: none; margin: 0; padding: 0 0 4px 18px; }
-li { display: flex; gap: 16px; justify-content: space-between; overflow-wrap: anywhere; padding: 7px 0; }
-li[hidden], .file-group[hidden], .area[hidden] { display: none !important; }
-.file-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.file-dir { color: var(--vscode-descriptionForeground); font-size: 12px; }
-li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; }
+.table-wrap { border: 1px solid var(--vscode-panel-border); border-radius: 12px; overflow: auto; }
+.file-table { border-collapse: collapse; width: 100%; }
+.file-table th, .file-table td { padding: 8px 10px; text-align: left; vertical-align: top; }
+.file-table th { color: var(--vscode-descriptionForeground); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.file-table tbody tr { border-top: 1px solid var(--vscode-panel-border); }
+.file-table .sno { color: var(--vscode-descriptionForeground); width: 64px; }
+.file-table .file-name { overflow-wrap: anywhere; }
+.file-table .lines { text-align: right; white-space: nowrap; width: 120px; }
+.file-table th:last-child, .file-table td.lines { text-align: right; }
+tr[hidden] { display: none !important; }
 .empty { color: var(--vscode-descriptionForeground); }
 @media (max-width: 760px) {
 	.topbar, .files-header { align-items: stretch; flex-direction: column; }
 	.topbar-actions, .files-toolbar { justify-content: stretch; }
-	.search-box, .filter-box, .filter-box select, .ghost-button, .refresh-button { width: 100%; }
+	.search-box, .ghost-button, .refresh-button { width: 100%; }
 	.summary { grid-template-columns: 1fr; }
 }
 </style>
@@ -433,7 +411,6 @@ li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; 
 	<div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div>
 	<div class="topbar-actions">
 		<label class="search-box"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-linecap="round"/></svg><input id="search" type="search" placeholder="Search files..." aria-label="Search files"></label>
-		<label class="filter-box"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12L9.5 9.2V13l-3 1.5V9.2L2 4z" stroke="currentColor" stroke-linejoin="round"/></svg><select id="area-filter" aria-label="Filter by area"><option value="all">Filter</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></label>
 		<button id="refresh" class="refresh-button" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.4-3.5M13 3.5V6h-2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>Refresh</button>
 	</div>
 </div>
@@ -444,98 +421,68 @@ li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; 
 <div class="files-header">
 	<h2>Files</h2>
 	<div class="files-toolbar">
-		<label>Sort by: <select id="sort-by" aria-label="Sort files"><option value="type">File Type</option><option value="files">File count</option><option value="lines">Line count</option></select></label>
+		<label>Sort by: <select id="sort-by" aria-label="Sort files"><option value="name">Name</option><option value="lines">No. of lines</option></select></label>
 		<button id="download-csv" class="ghost-button" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v7M5.5 7.5L8 10l2.5-2.5M3.5 13h9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>Export</button>
 	</div>
 </div>
-${areaHtml}
+${filesHtml}
 </main>
 <script>
 const vscode = acquireVsCodeApi();
 const search = document.getElementById('search');
-const areaFilter = document.getElementById('area-filter');
 const sortBy = document.getElementById('sort-by');
 const csvContent = ${JSON.stringify(csvContent)};
+function matchScore(row, query) {
+	const name = row.dataset.name || '';
+	if (!query) return 4;
+	if (name === query) return 0;
+	if (name.startsWith(query)) return 1;
+	if (name.includes(query)) return 2;
+	return 99;
+}
+function renumberRows() {
+	let serial = 1;
+	document.querySelectorAll('.file-table tbody tr').forEach((row) => {
+		if (row.hidden) return;
+		row.querySelector('.sno').textContent = String(serial++);
+	});
+}
 function filterFiles() {
 	const query = search.value.trim().toLowerCase();
-	const area = areaFilter.value;
-	document.querySelectorAll('.area').forEach((areaElement) => {
-		const matchesArea = area === 'all' || areaElement.dataset.area === area;
-		let visibleFiles = 0;
-		let bestAreaScore = 99;
-		areaElement.querySelectorAll('.file-group').forEach((group) => {
-			let groupVisible = 0;
-			let bestGroupScore = 99;
-			const files = [...group.querySelectorAll('li')];
-			files.forEach((file) => {
-				const name = file.dataset.name || '';
-				const path = file.dataset.path || '';
-				let score = 99;
-				if (!query) {
-					score = 4;
-				} else if (name === query || path === query || path.endsWith('/' + query)) {
-					score = 0;
-				} else if (name.startsWith(query)) {
-					score = 1;
-				} else if (name.includes(query)) {
-					score = 2;
-				} else if (path.includes(query)) {
-					score = 3;
-				}
-				const visible = matchesArea && score < 99;
-				file.hidden = !visible;
-				file.dataset.score = String(score);
-				if (visible) {
-					groupVisible++;
-					bestGroupScore = Math.min(bestGroupScore, score);
-				}
-			});
-			files.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score) || (first.dataset.name || '').localeCompare(second.dataset.name || ''));
-			files.forEach((file) => file.parentElement.appendChild(file));
-			group.hidden = groupVisible === 0;
-			group.open = query.length > 0 && groupVisible > 0;
-			group.dataset.score = String(bestGroupScore);
-			if (groupVisible > 0) {
-				visibleFiles += groupVisible;
-				bestAreaScore = Math.min(bestAreaScore, bestGroupScore);
-			}
-		});
-		const groups = [...areaElement.querySelectorAll('.file-group')];
-		if (query) {
-			groups.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score) || (first.dataset.label || '').localeCompare(second.dataset.label || ''));
-			groups.forEach((group) => areaElement.appendChild(group));
-		}
-		areaElement.hidden = visibleFiles === 0;
-		areaElement.dataset.score = String(bestAreaScore);
+	const rows = [...document.querySelectorAll('.file-table tbody tr')];
+	rows.forEach((row) => {
+		const score = matchScore(row, query);
+		row.hidden = score === 99;
+		row.dataset.score = String(score);
 	});
 	if (query) {
-		const areas = [...document.querySelectorAll('.area')];
-		areas.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score));
-		areas.forEach((areaElement) => areaElement.parentElement.appendChild(areaElement));
+		rows.sort((first, second) => Number(first.dataset.score) - Number(second.dataset.score) || (first.dataset.name || '').localeCompare(second.dataset.name || ''));
+		rows.forEach((row) => row.parentElement.appendChild(row));
 	} else {
-		document.querySelectorAll('.file-group').forEach((group) => {
-			const files = [...group.querySelectorAll('li')];
-			files.sort((first, second) => (first.dataset.path || '').localeCompare(second.dataset.path || ''));
-			files.forEach((file) => file.parentElement.appendChild(file));
-		});
-		sortGroups();
+		sortRows();
+		return;
 	}
+	renumberRows();
 }
-function sortGroups() {
+function sortRows() {
 	const mode = sortBy.value;
-	document.querySelectorAll('.area').forEach((areaElement) => {
-		const groups = [...areaElement.querySelectorAll('.file-group')];
-		groups.sort((first, second) => {
-			if (mode === 'lines') return Number(second.dataset.lines) - Number(first.dataset.lines);
-			if (mode === 'files') return Number(second.dataset.files) - Number(first.dataset.files);
-			return (first.dataset.label || '').localeCompare(second.dataset.label || '');
-		});
-		groups.forEach((group) => areaElement.appendChild(group));
+	const rows = [...document.querySelectorAll('.file-table tbody tr')];
+	rows.sort((first, second) => {
+		if (mode === 'lines') return Number(second.dataset.lines) - Number(first.dataset.lines);
+		return (first.dataset.name || '').localeCompare(second.dataset.name || '');
 	});
+	rows.forEach((row) => row.parentElement.appendChild(row));
+	renumberRows();
 }
 search.addEventListener('input', filterFiles);
-areaFilter.addEventListener('change', filterFiles);
-sortBy.addEventListener('change', sortGroups);
+sortBy.addEventListener('change', () => {
+	if (search.value.trim()) {
+		filterFiles();
+		return;
+	}
+	sortRows();
+});
+renumberRows();
 document.getElementById('refresh').addEventListener('click', (event) => {
 	event.currentTarget.disabled = true;
 	vscode.postMessage({ type: 'refresh' });
@@ -579,9 +526,6 @@ class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
 				hasWorkspace: false,
 				totalFiles: 0,
 				totalLines: 0,
-				frontend: 0,
-				backend: 0,
-				other: 0,
 			});
 			return;
 		}
@@ -591,9 +535,6 @@ class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
 			hasWorkspace: true,
 			totalFiles: stats.files.length,
 			totalLines: stats.totalLines,
-			frontend: stats.files.filter((file) => file.area === 'Frontend').length,
-			backend: stats.files.filter((file) => file.area === 'Backend').length,
-			other: stats.files.filter((file) => file.area === 'Other').length,
 		});
 	}
 }
@@ -602,18 +543,10 @@ function renderSidebarHtml(summary: {
 	hasWorkspace: boolean;
 	totalFiles: number;
 	totalLines: number;
-	frontend: number;
-	backend: number;
-	other: number;
 }): string {
 	const body = summary.hasWorkspace
 		? `<div class="metric"><strong>${summary.totalFiles}</strong>Total files</div>
 <div class="metric"><strong>${summary.totalLines}</strong>Total lines</div>
-<ul>
-<li><span>Frontend</span><strong>${summary.frontend}</strong></li>
-<li><span>Backend</span><strong>${summary.backend}</strong></li>
-<li><span>Other</span><strong>${summary.other}</strong></li>
-</ul>
 <button id="open-report" type="button">Open full report</button>`
 		: '<p class="empty">Open a project folder to view statistics.</p>';
 
