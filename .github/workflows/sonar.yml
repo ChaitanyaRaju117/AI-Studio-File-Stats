@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
-      SONAR_HOST_URL: https://sonarcloud.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -34,28 +32,8 @@ jobs:
       - name: Run tests with coverage
         run: xvfb-run -a npm run test:coverage
 
-      - name: Install SonarScanner
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${SONAR_TOKEN:-}" || -z "${SONAR_ORGANIZATION:-}" ]]; then
-            echo "SONAR_TOKEN or SONAR_ORGANIZATION is missing, so SonarQube scan was skipped."
-            exit 0
-          fi
-          scanner_version="8.1.0.6389"
-          curl -fsSL -o sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${scanner_version}-linux.zip"
-          unzip -q sonar-scanner.zip
-          echo "${GITHUB_WORKSPACE}/sonar-scanner-${scanner_version}-linux/bin" >> "$GITHUB_PATH"
-
       - name: SonarQube Scan
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${SONAR_TOKEN:-}" || -z "${SONAR_ORGANIZATION:-}" ]]; then
-            echo "SONAR_TOKEN or SONAR_ORGANIZATION is missing, so SonarQube scan was skipped."
-            exit 0
-          fi
-          sonar-scanner \
-            -Dsonar.host.url="${SONAR_HOST_URL}" \
-            -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.organization="${SONAR_ORGANIZATION}"
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
