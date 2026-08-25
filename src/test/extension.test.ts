@@ -134,7 +134,6 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSensitiveFile('src/private/UserRepository.java'), false);
 		assert.strictEqual(isSensitiveFile('app/password_utils.py'), false);
 		assert.strictEqual(isSensitiveFile('app/config_loader.py'), false);
-		assert.strictEqual(isSensitiveFile('.gitignore'), false);
 		assert.strictEqual(isSensitiveFile('package-lock.json'), false);
 		// Java resource bundles are translations, not credentials.
 		assert.strictEqual(isSensitiveFile('resources/messages_en.properties'), false);
@@ -160,6 +159,8 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isGeneratedFile('target/App.class'), true);
 		assert.strictEqual(isGeneratedFile('src/.idea/workspace.xml'), true);
 		assert.strictEqual(isGeneratedFile('old/config.old'), true);
+		assert.strictEqual(isGeneratedFile('.gitignore'), true);
+		assert.strictEqual(isGeneratedFile('auth-service/.gitignore'), true);
 		assert.strictEqual(isGeneratedFile('package-lock.json'), true);
 		assert.strictEqual(isGeneratedFile('yarn.lock'), true);
 		assert.strictEqual(isGeneratedFile('dist/bundle.min.js'), true);

@@ -95,6 +95,7 @@ const CONFIG_DIRECTORIES = /(^|\/)(config|configs|conf|configuration|settings|he
 const GENERATED_DIRECTORIES = /(^|\/)(node_modules|bower_components|vendor|\.git|\.svn|\.hg|dist|build|out|target|obj|\.gradle|\.idea|\.vs|\.vscode-test|__pycache__|\.pytest_cache|\.mypy_cache|\.venv|venv|site-packages|coverage|\.nyc_output|\.next|\.nuxt|\.svelte-kit|\.turbo|\.terraform)(\/|$)/;
 
 const GENERATED_FILENAMES = new Set([
+	'.gitignore',
 	'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml',
 	'composer.lock', 'gemfile.lock', 'poetry.lock', 'pipfile.lock', 'cargo.lock',
 	'podfile.lock', 'packages.lock.json', 'go.sum',
