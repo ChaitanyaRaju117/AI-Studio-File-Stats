@@ -338,8 +338,8 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 		}
 		const groupsHtml = [...fileGroups.entries()]
 			.sort(([first], [second]) => first.localeCompare(second))
-			.map(([extension, files]) => `<details class="file-group"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
-				.map((file) => `<li><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
+			.map(([extension, files]) => `<details class="file-group" data-extension="${escapeHtml(extension)}"><summary><span>${escapeHtml(extension)}</span><span class="group-count">${files.length} files / ${files.reduce((total, file) => total + file.lines, 0)} lines</span></summary><ul>${files
+				.map((file) => `<li data-file-name="${escapeHtml(file.name)}" data-lines="${file.lines}"><span>${escapeHtml(file.name)}</span><strong>${file.lines} lines</strong></li>`)
 				.join('')}</ul></details>`)
 			.join('');
 		return `<article class="area" data-area="${area.toLowerCase()}"><div class="area-heading"><h2>${area}</h2><span>${areaFiles.length} files / ${areaLines} lines</span></div>${groupsHtml || '<p class="empty">No files found.</p>'}</article>`;
@@ -352,21 +352,35 @@ async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 * { box-sizing: border-box; }
-body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 32px clamp(18px, 5vw, 64px); }
-main { max-width: 980px; margin: 0 auto; }
-.topbar { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 26px; }
-h1 { font-size: 26px; margin: 0; }
+body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); line-height: 1.4; margin: 0; padding: 28px clamp(18px, 4vw, 56px); }
+main { max-width: 1120px; margin: 0 auto; }
+.topbar { align-items: flex-start; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 16px; }
+.header-copy h1 { font-size: 26px; margin: 0; }
 .subtitle { color: var(--vscode-descriptionForeground); margin: 4px 0 0; }
-.topbar-actions { display: flex; align-items: center; }
-.download-button { background: var(--vscode-button-background); border: 1px solid var(--vscode-button-border, transparent); color: var(--vscode-button-foreground); cursor: pointer; font: inherit; padding: 8px 14px; }
-.download-button:hover { background: var(--vscode-button-hoverBackground); }
-.controls { display: flex; gap: 8px; margin-bottom: 18px; }
-input, select { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); color: var(--vscode-input-foreground); font: inherit; padding: 8px 10px; }
-input { flex: 1; min-width: 180px; }
-select { min-width: 130px; }
-.summary { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 28px; }
-.metric { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); padding: 16px 18px; }
-.metric strong { display: block; font-size: 30px; color: var(--vscode-textLink-foreground); }
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; justify-content: flex-end; }
+.toolbar-group { position: relative; }
+.search-input { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 10px; color: var(--vscode-input-foreground); font: inherit; min-width: 210px; padding: 9px 12px; }
+.search-input::placeholder { color: var(--vscode-descriptionForeground); }
+.toolbar-button { align-items: center; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(96, 165, 250, 0.22); border-radius: 10px; color: var(--vscode-foreground); cursor: pointer; display: inline-flex; gap: 8px; font: inherit; height: 38px; padding: 0 14px; transition: background 120ms ease, border-color 120ms ease, transform 120ms ease; }
+.toolbar-button:hover { background: rgba(59, 130, 246, 0.14); border-color: rgba(96, 165, 250, 0.34); }
+.toolbar-button svg { color: #4da3ff; flex: 0 0 auto; }
+.refresh-button { background: linear-gradient(180deg, rgba(37, 99, 235, 0.68), rgba(30, 64, 175, 0.72)); border: 1px solid rgba(96, 165, 250, 0.24); color: #ffffff; }
+.refresh-button:hover { background: linear-gradient(180deg, rgba(37, 99, 235, 0.78), rgba(30, 64, 175, 0.8)); }
+.refresh-button svg { color: #dbeafe; }
+.files-bar { align-items: center; display: flex; gap: 14px; justify-content: space-between; margin: 16px 0 10px; }
+.files-actions { align-items: center; display: flex; gap: 10px; justify-content: flex-end; }
+.sort-label { color: var(--vscode-descriptionForeground); font-size: 13px; }
+.sort-select { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 10px; color: var(--vscode-input-foreground); font: inherit; min-width: 142px; padding: 9px 12px; }
+.export-button { min-width: 96px; }
+.summary-cards { display: flex; gap: 10px; margin-bottom: 16px; }
+.stat-card { align-items: center; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 12px; display: flex; flex: 1; gap: 12px; min-width: 0; padding: 10px 12px; }
+.stat-icon { align-items: center; background: rgba(59, 130, 246, 0.08); border-radius: 10px; color: #4da3ff; display: inline-flex; flex: 0 0 auto; height: 30px; justify-content: center; width: 30px; }
+.stat-content { min-width: 0; }
+.stat-value { color: var(--vscode-textLink-foreground); font-size: 24px; font-weight: 700; line-height: 1.05; }
+.stat-label { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 2px; }
+.filter-menu { background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24); min-width: 180px; padding: 6px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 10; }
+.filter-menu button { background: transparent; border: 0; border-radius: 8px; color: var(--vscode-foreground); cursor: pointer; display: block; font: inherit; padding: 8px 10px; text-align: left; width: 100%; }
+.filter-menu button:hover, .filter-menu button[aria-pressed="true"] { background: rgba(59, 130, 246, 0.12); }
 .section-title { font-size: 14px; letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
 .area { border: 1px solid var(--vscode-panel-border); margin: 12px 0; padding: 0 16px 12px; }
 .area-heading { align-items: baseline; border-bottom: 1px solid var(--vscode-panel-border); display: flex; justify-content: space-between; }
@@ -383,29 +397,119 @@ ul { list-style: none; margin: 0; padding: 0 0 4px 18px; }
 li { display: flex; gap: 16px; justify-content: space-between; overflow-wrap: anywhere; padding: 7px 0; }
 li strong { color: var(--vscode-textPreformat-foreground); white-space: nowrap; }
 .empty { color: var(--vscode-descriptionForeground); }
-@media (max-width: 600px) { .topbar { align-items: start; flex-direction: column; } .summary { grid-template-columns: 1fr; } .controls { flex-direction: column; } }
+@media (max-width: 780px) { .topbar { align-items: start; flex-direction: column; } .toolbar { flex-wrap: wrap; justify-content: flex-start; width: 100%; } .search-input { min-width: 0; width: 100%; } .files-bar { align-items: flex-start; flex-direction: column; } .files-actions { justify-content: flex-start; width: 100%; } .summary-cards { flex-direction: column; } }
 </style>
 </head>
 <body>
 <main>
-<div class="topbar"><div><h1>Project Statistics</h1><p class="subtitle">Overview of files and lines in this workspace</p></div><div class="topbar-actions"><button id="download-csv" class="download-button" type="button">Download CSV</button></div></div>
-<div class="controls"><input id="search" type="search" placeholder="Search files..." aria-label="Search files"><select id="area-filter" aria-label="Filter by area"><option value="all">All areas</option><option value="frontend">Frontend</option><option value="backend">Backend</option><option value="other">Other</option></select></div>
-<div class="summary">
-<div class="metric"><strong>${stats.files.length}</strong>Total files</div>
-<div class="metric"><strong>${stats.totalLines}</strong>Total lines</div>
+<div class="topbar">
+<div class="header-copy">
+<h1>Project Statistics</h1>
+<p class="subtitle">Overview of files and lines in this workspace</p>
 </div>
+<div class="toolbar">
+<div class="toolbar-group"><input id="search" class="search-input" type="search" placeholder="Search files..." aria-label="Search files"></div>
+<div class="toolbar-group">
+<button id="filter-button" class="toolbar-button" type="button" aria-haspopup="menu" aria-expanded="false">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 3h11L9.5 8v4.5l-3 1.5V8L2.5 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+<span id="filter-button-label">Filter</span>
+</button>
+<div id="filter-menu" class="filter-menu" role="menu" hidden>
+<button type="button" data-area="all" aria-pressed="true">All areas</button>
+<button type="button" data-area="frontend" aria-pressed="false">Frontend</button>
+<button type="button" data-area="backend" aria-pressed="false">Backend</button>
+<button type="button" data-area="other" aria-pressed="false">Other</button>
+</div>
+</div>
+<button id="refresh-button" class="toolbar-button refresh-button" type="button" aria-label="Refresh project statistics">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.8 4.7A5.5 5.5 0 1 0 13.5 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2.5v2.5h-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 5 9.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<span>Refresh</span>
+</button>
+</div>
+</div>
+<div class="summary-cards">
+<div class="stat-card">
+<div class="stat-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h7L13.5 6v7.5h-11V2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.5 2.5V6H13.5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+<div class="stat-content"><div class="stat-value">${stats.files.length}</div><div class="stat-label">Total files</div></div>
+</div>
+<div class="stat-card">
+<div class="stat-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h2.25M6.5 4.5h6.5M3 8h2.25M6.5 8h6.5M3 11.5h2.25M6.5 11.5h6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+<div class="stat-content"><div class="stat-value">${stats.totalLines}</div><div class="stat-label">Total lines</div></div>
+</div>
+</div>
+<div class="files-bar">
 <h2 class="section-title">Files</h2>
+<div class="files-actions">
+<label class="sort-label" for="sort-by">Sort by:</label>
+<select id="sort-by" class="sort-select" aria-label="Sort by">
+<option value="file-type" selected>File Type</option>
+<option value="file-count">File Count</option>
+<option value="total-lines">Total Lines</option>
+</select>
+<button id="export-button" class="toolbar-button export-button" type="button">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.5v7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m5.5 7.5 2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+<span>Export</span>
+</button>
+</div>
+</div>
 ${areaHtml}
 </main>
 <script>
+const vscode = acquireVsCodeApi();
 const search = document.getElementById('search');
-const areaFilter = document.getElementById('area-filter');
+const filterButton = document.getElementById('filter-button');
+const filterButtonLabel = document.getElementById('filter-button-label');
+const filterMenu = document.getElementById('filter-menu');
+const refreshButton = document.getElementById('refresh-button');
+const sortBy = document.getElementById('sort-by');
+const exportButton = document.getElementById('export-button');
 const csvContent = ${JSON.stringify(csvContent)};
+let activeArea = 'all';
+function sortGroups() {
+	const mode = sortBy.value;
+	document.querySelectorAll('.area').forEach((areaElement) => {
+		const heading = areaElement.querySelector('.area-heading');
+		const groups = Array.from(areaElement.querySelectorAll('.file-group'));
+		groups.sort((first, second) => {
+			if (mode === 'file-count') {
+				const firstCount = Number(first.querySelectorAll('li').length);
+				const secondCount = Number(second.querySelectorAll('li').length);
+				if (firstCount !== secondCount) return secondCount - firstCount;
+				return (first.dataset.extension || '').localeCompare(second.dataset.extension || '');
+			}
+			if (mode === 'total-lines') {
+				const firstLines = Array.from(first.querySelectorAll('li')).reduce((total, file) => total + Number(file.dataset.lines || '0'), 0);
+				const secondLines = Array.from(second.querySelectorAll('li')).reduce((total, file) => total + Number(file.dataset.lines || '0'), 0);
+				if (firstLines !== secondLines) return secondLines - firstLines;
+				return (first.dataset.extension || '').localeCompare(second.dataset.extension || '');
+			}
+			return (first.dataset.extension || '').localeCompare(second.dataset.extension || '');
+		});
+		groups.forEach((group) => areaElement.appendChild(group));
+		if (heading) areaElement.insertBefore(heading, areaElement.firstChild);
+	});
+}
+function setActiveArea(area) {
+	activeArea = area;
+	filterButtonLabel.textContent = area === 'all'
+		? 'Filter'
+		: 'Filter: ' + area.charAt(0).toUpperCase() + area.slice(1);
+	filterMenu.querySelectorAll('button[data-area]').forEach((button) => {
+		button.setAttribute('aria-pressed', String(button.dataset.area === area));
+	});
+	filterMenu.hidden = true;
+	filterButton.setAttribute('aria-expanded', 'false');
+	filterFiles();
+}
+function toggleFilterMenu(forceOpen) {
+	const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : filterMenu.hidden;
+	filterMenu.hidden = !shouldOpen;
+	filterButton.setAttribute('aria-expanded', String(shouldOpen));
+}
 function filterFiles() {
 	const query = search.value.toLowerCase();
-	const area = areaFilter.value;
 	document.querySelectorAll('.area').forEach((areaElement) => {
-		const matchesArea = area === 'all' || areaElement.dataset.area === area;
+		const matchesArea = activeArea === 'all' || areaElement.dataset.area === activeArea;
 		let visibleFiles = 0;
 		areaElement.querySelectorAll('.file-group').forEach((group) => {
 			let groupVisible = 0;
@@ -420,17 +524,39 @@ function filterFiles() {
 		areaElement.hidden = visibleFiles === 0;
 	});
 }
-search.addEventListener('input', filterFiles);
-areaFilter.addEventListener('change', filterFiles);
-document.getElementById('download-csv').addEventListener('click', () => {
+function downloadCsv() {
 	const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 	const url = URL.createObjectURL(blob);
-	const link = document.createElement('a');
-	link.href = url;
-	link.download = 'project-statistics.csv';
-	link.click();
+	const anchor = document.createElement('a');
+	anchor.href = url;
+	anchor.download = 'project-statistics.csv';
+	anchor.style.display = 'none';
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
 	URL.revokeObjectURL(url);
+}
+search.addEventListener('input', filterFiles);
+filterButton.addEventListener('click', () => toggleFilterMenu());
+filterMenu.querySelectorAll('button[data-area]').forEach((button) => {
+	button.addEventListener('click', () => setActiveArea(button.dataset.area || 'all'));
 });
+document.addEventListener('click', (event) => {
+	const target = event.target;
+	if (!(target instanceof Node) || (!filterMenu.contains(target) && target !== filterButton && !filterButton.contains(target))) {
+		toggleFilterMenu(false);
+	}
+});
+refreshButton.addEventListener('click', () => {
+	vscode.postMessage({ type: 'refresh' });
+});
+sortBy.addEventListener('change', () => {
+	sortGroups();
+	filterFiles();
+});
+exportButton.addEventListener('click', downloadCsv);
+sortGroups();
+setActiveArea('all');
 </script>
 </body>
 </html>`;
@@ -567,6 +693,11 @@ async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<vo
 		{ enableScripts: true },
 	);
 	statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
+	statisticsPanel.webview.onDidReceiveMessage(async (message: { type?: string }) => {
+		if (message.type === 'refresh') {
+			await renderStatistics(statisticsPanel!);
+		}
+	});
 	await renderStatistics(statisticsPanel);
 }
 
