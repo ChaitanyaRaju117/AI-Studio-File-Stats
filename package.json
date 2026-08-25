@@ -1,9 +1,9 @@
 {
   "name": "python-project-statistics",
-  "displayName": "AI-Studio-File-Stats",
+  "displayName": "aicount",
   "publisher": "chaitanyarajuBahatam",
   "description": "Counts files and lines by file type in your workspace",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"
@@ -11,7 +11,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -22,8 +24,40 @@
       {
         "command": "poc.projectStatistics",
         "title": "Project Statistics"
+      },
+      {
+        "command": "poc.refreshSidebar",
+        "title": "Refresh Statistics",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aicount",
+          "title": "aicount",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "aicount": [
+        {
+          "type": "webview",
+          "id": "aicount.sidebar",
+          "name": "Project Statistics"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "poc.refreshSidebar",
+          "when": "view == aicount.sidebar",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -31,17 +65,18 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:coverage": "npm run compile && npm run lint && vscode-test --coverage --coverage-output coverage --coverage-reporter lcov"
   },
   "devDependencies": {
-    "@types/vscode": "^1.134.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
+    "@types/vscode": "^1.134.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
     "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript-eslint": "^8.61.1"
   },
   "overrides": {
     "diff": "^8.0.4",

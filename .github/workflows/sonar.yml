@@ -1,0 +1,56 @@
+name: SonarQube
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: xvfb-run -a npm run test:coverage
+
+      - name: Install SonarScanner
+        if: ${{ secrets.SONAR_TOKEN != '' && vars.SONAR_ORGANIZATION != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner_version="8.1.0.6389"
+          curl -fsSL -o sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${scanner_version}-linux.zip"
+          unzip -q sonar-scanner.zip
+          echo "${GITHUB_WORKSPACE}/sonar-scanner-${scanner_version}-linux/bin" >> "$GITHUB_PATH"
+
+      - name: SonarQube Scan
+        if: ${{ secrets.SONAR_TOKEN != '' && vars.SONAR_ORGANIZATION != '' }}
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+          sonar-scanner \
+            -Dsonar.organization="${{ vars.SONAR_ORGANIZATION }}" \
+            -Dsonar.projectKey=db4a80c6f8c4c36f0e4c9900d8b7fa7699d53046
+
+      - name: Skip SonarQube Scan
+        if: ${{ secrets.SONAR_TOKEN == '' || vars.SONAR_ORGANIZATION == '' }}
+        run: echo "SONAR_TOKEN or SONAR_ORGANIZATION is missing, so SonarQube scan was skipped."
