@@ -56,4 +56,6 @@ jobs:
             exit 0
           fi
           sonar-scanner \
-            -Dsonar.host.url="${SONAR_HOST_URL}"
+            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.organization="${SONAR_ORGANIZATION}"
