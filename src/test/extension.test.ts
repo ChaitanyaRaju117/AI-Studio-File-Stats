@@ -25,6 +25,8 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(countLines('first\nsecond\n'), 3);
 		assert.strictEqual(countLines('first\r\nsecond'), 2);
 		assert.strictEqual(countLines('first\n\n'), 3);
+		assert.strictEqual(countLines('first\nsecond'), 2);
+		assert.strictEqual(countLines('first\nsecond\nthird'), 3);
 	});
 
 	test('skips files by secret content rather than file name', () => {

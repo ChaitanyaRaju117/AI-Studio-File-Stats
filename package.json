@@ -3,7 +3,7 @@
   "displayName": "aicount",
   "publisher": "chaitanyarajuBahatam",
   "description": "Shows workspace file and line counts in the aicount sidebar, with a full report and CSV export",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"

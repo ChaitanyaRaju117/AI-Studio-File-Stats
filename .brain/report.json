@@ -1,7 +1,8 @@
 {
   "schema_version": "1.1",
-  "project": "AI-Studio-File-Stats",
-  "push_count": 0,
+  "project": "poc",
+  "last_push": "2026-08-26",
+  "push_count": 1,
   "memories_stored": 0,
   "memories_retrieved": 0,
   "utilisation_rate": null,

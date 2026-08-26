@@ -28,6 +28,7 @@ export interface ProjectStats {
 let statisticsPanel: vscode.WebviewPanel | undefined;
 let statisticsSidebar: StatisticsSidebarProvider | undefined;
 let statisticsRefresh: Promise<void> | undefined;
+let statisticsRefreshAgain = false;
 let statisticsPanelReady = false;
 
 const GENERATED_DIRECTORIES = /(^|\/)(node_modules|bower_components|vendor|\.git|\.svn|\.hg|dist|build|out|target|obj|\.gradle|\.idea|\.vs|\.vscode-test|__pycache__|\.pytest_cache|\.mypy_cache|\.venv|venv|site-packages|coverage|\.nyc_output|\.next|\.nuxt|\.svelte-kit|\.turbo|\.terraform)(\/|$)/;
@@ -630,12 +631,11 @@ async function collectProjectStats(): Promise<ProjectStats> {
 		const extension = fileExtensionBucket(name);
 
 		try {
-			const bytes = await vscode.workspace.fs.readFile(uri);
-			if (looksBinary(bytes)) {
+			const editorText = openEditorText(uri);
+			const text = editorText ?? await readDiskText(uri);
+			if (text === undefined) {
 				continue;
 			}
-
-			const text = new TextDecoder().decode(bytes);
 			if (isSensitiveContent(text)) {
 				continue;
 			}
@@ -656,6 +656,33 @@ async function collectProjectStats(): Promise<ProjectStats> {
 		files: files.sort((first, second) => fileDisplayPath(first).localeCompare(fileDisplayPath(second))),
 		totalLines: files.reduce((total, file) => total + file.lines, 0),
 	};
+}
+
+function openEditorText(uri: vscode.Uri): string | undefined {
+	const wanted = normalizePath(uri.fsPath);
+	if (!wanted) {
+		return undefined;
+	}
+
+	for (const document of vscode.workspace.textDocuments) {
+		if (document.uri.scheme !== uri.scheme) {
+			continue;
+		}
+		if (normalizePath(document.uri.fsPath) === wanted) {
+			return document.getText();
+		}
+	}
+
+	return undefined;
+}
+
+async function readDiskText(uri: vscode.Uri): Promise<string | undefined> {
+	const bytes = await vscode.workspace.fs.readFile(uri);
+	if (looksBinary(bytes)) {
+		return undefined;
+	}
+
+	return new TextDecoder().decode(bytes);
 }
 
 function fileDisplayPath(file: FileStats): string {
@@ -716,29 +743,33 @@ export function buildProjectStatsCsv(stats: ProjectStats): string {
 }
 async function refreshProjectStatistics(showProgress: boolean): Promise<void> {
 	if (statisticsRefresh) {
+		statisticsRefreshAgain = true;
 		return statisticsRefresh;
 	}
 
 	statisticsRefresh = (async () => {
 		try {
-			if (!vscode.workspace.workspaceFolders?.length) {
-				statisticsSidebar?.renderSummary();
-				if (statisticsPanelReady && statisticsPanel) {
-					void statisticsPanel.webview.postMessage({ type: 'statsError' });
+			do {
+				statisticsRefreshAgain = false;
+				if (!vscode.workspace.workspaceFolders?.length) {
+					statisticsSidebar?.renderSummary();
+					if (statisticsPanelReady && statisticsPanel) {
+						void statisticsPanel.webview.postMessage({ type: 'statsError' });
+					}
+					return;
 				}
-				return;
-			}
 
-			const stats = showProgress
-				? await vscode.window.withProgress(
-					{ location: vscode.ProgressLocation.Notification, title: 'Analyzing project statistics...' },
-					() => collectProjectStats(),
-				)
-				: await collectProjectStats();
-			if (statisticsPanel) {
-				setStatisticsPanelHtml(statisticsPanel, stats);
-			}
-			statisticsSidebar?.renderSummary(stats);
+				const stats = showProgress
+					? await vscode.window.withProgress(
+						{ location: vscode.ProgressLocation.Notification, title: 'Analyzing project statistics...' },
+						() => collectProjectStats(),
+					)
+					: await collectProjectStats();
+				if (statisticsPanel) {
+					setStatisticsPanelHtml(statisticsPanel, stats);
+				}
+				statisticsSidebar?.renderSummary(stats);
+			} while (statisticsRefreshAgain);
 		} catch {
 			if (statisticsPanelReady && statisticsPanel) {
 				void statisticsPanel.webview.postMessage({ type: 'statsError' });

@@ -41,6 +41,10 @@ Line counts are based on physical lines in each file. Files that cannot be read,
 
 ## Release Notes
 
+### 0.0.15
+
+Refresh counts lines from the open editor, so adding a line to a file updates the total after Refresh.
+
 ### 0.0.14
 
 Hides the aicount sidebar as soon as the extension is uninstalled or deactivated, so file counts stop updating.

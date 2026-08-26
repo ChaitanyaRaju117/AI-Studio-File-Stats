@@ -2,3 +2,5 @@
 [2026-08-26T06:58:04Z] init provider=none
 [2026-08-26T06:58:04Z] bootstrap-start files=7 dry_run=False provider=regex-only
 [2026-08-26T06:58:04Z] bootstrap-done files=7 stored=0
+[2026-08-26T08:08:37Z] capture-start branch=ui-changes files=10
+[2026-08-26T08:08:37Z] capture-done proposed=0 promoted=0 auto_added=0 conflicts=0 stage1=0 stage2=0 commit=7722825
