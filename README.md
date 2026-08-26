@@ -13,7 +13,7 @@ After you install it, a popup asks whether you want to see the project structure
 - Exports a CSV with total files, total lines, each file name, and its line count. Each download uses a unique name: `{project}_AIStudioFileStats_{YYYYMMDD}_{HHMMSS}.csv`.
 - Counts every physical line, including blank lines and a trailing blank line at the end of a file.
 - Skips dependency, version-control, virtual-environment, and cache folders such as `node_modules`, `.git`, and `.venv`.
-- Does not read or display sensitive files such as environment, Docker, Git, or lock files.
+- Skips known secret files by name (`.env`, `appsettings.json`, `settings.py`, keys/certs, and similar) without reading them. Ordinary Dockerfiles, Compose files, `nginx.conf`, and `.properties` files are counted unless their contents look like secrets.
 
 ## Usage
 
@@ -37,7 +37,7 @@ This extension does not add any settings.
 
 ## Known Issues
 
-Line counts are based on physical lines in each file. Files that cannot be read, binary files, and files with no extension are not included in the report.
+Line counts are based on physical lines in each file. Files that cannot be read, binary files, and files whose contents look like secrets are not included in the report.
 
 ## Release Notes
 
