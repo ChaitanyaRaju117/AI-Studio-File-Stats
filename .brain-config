@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "project": "poc",
+  "remote": "https://github.com/ChaitanyaRaju117/AI-Studio-File-Stats.git",
+  "brain_version": "1.0.0",
+  "bootstrap": {
+    "done": true,
+    "at_commit": "7ae0db0967965691d5fe6c54e3b694a4c7fdf2bc",
+    "at": "2026-08-26T06:59:19.475515+00:00"
+  }
+}

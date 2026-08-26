@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.1",
+  "project": "poc",
+  "push_count": 0,
+  "memories_stored": 0,
+  "memories_retrieved": 0,
+  "utilisation_rate": null,
+  "quality_score": null,
+  "memory_types": {
+    "business_rule": 0,
+    "decision": 0,
+    "constraint": 0,
+    "failure": 0,
+    "intent": 0,
+    "tradeoff": 0,
+    "debt": 0
+  },
+  "stage1_count": 0,
+  "stage2_count": 0,
+  "total_extracted": 0,
+  "stale_count": 0,
+  "provider": "none",
+  "risk": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0
+  },
+  "debt": {
+    "design": 0,
+    "defect": 0,
+    "documentation": 0,
+    "requirement": 0,
+    "test": 0
+  },
+  "decision_debt": 0,
+  "incidents": 0,
+  "enforced": 0,
+  "documented": 0,
+  "subsystems": []
+}

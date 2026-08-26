@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "project-brain": {
+      "command": "C:\\Users\\SRS\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\brain-mcp-server.EXE",
+      "args": [],
+      "env": {
+        "BRAIN_REPO_ROOT": "C:\\Users\\SRS\\desktop\\poc"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "get_context",
+        "get_file_context",
+        "get_business_rules",
+        "get_decisions",
+        "get_constraints",
+        "get_failures",
+        "record_memory",
+        "pending_memory",
+        "get_status"
+      ]
+    }
+  }
+}

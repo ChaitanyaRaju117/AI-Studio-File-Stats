@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "project-brain": {
+      "command": "C:\\Users\\SRS\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\brain-mcp-server.EXE",
+      "args": [],
+      "env": {
+        "BRAIN_REPO_ROOT": "C:\\Users\\SRS\\desktop\\poc"
+      }
+    }
+  }
+}
