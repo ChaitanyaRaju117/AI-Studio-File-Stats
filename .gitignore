@@ -2,3 +2,26 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
+# Project Brain - .brain/ tracking policy (default-deny allowlist)
+# Ignore everything under .brain/, then re-include ONLY the shared set, so a
+# new or per-developer file is ignored by default. The shared brain travels
+# with `git clone`; secrets + per-developer state never do.
+.brain/*
+!.brain/memory/
+.brain/memory/brain.db
+.brain/memory/embeddings/
+!.brain/manual/
+!.brain/metrics/
+!.brain/config.json
+!.brain/report.json
+!.brain/.brain-config
+# Transient / editor caches (repo root) + env
+.brain-context
+.brain-session
+.env
+# Per-developer IDE MCP configs - they hold ABSOLUTE local paths (interpreter + repo
+# root), so they're per-machine; regenerate with `brain init`, never commit.
+.cursor/mcp.json
+.claude/mcp.json
+.windsurf/mcp.json
+.cline/mcp_settings.json

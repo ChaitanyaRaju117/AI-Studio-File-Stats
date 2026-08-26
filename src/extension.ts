@@ -91,7 +91,17 @@ const SECRET_EXTENSIONS = new Set([
 	'.tfvars', '.tfstate', '.netrc',
 ]);
 
-const TRANSLATION_BUNDLE = /^(messages|labels|i18n|text|texts|strings|errors|validationmessages|bundle)([._-][a-z0-9_-]*)?\.properties$|_[a-z]{2}(_[a-z]{2})?\.properties$/;
+const TRANSLATION_BUNDLE_PREFIXES = new Set([
+	'messages',
+	'labels',
+	'i18n',
+	'text',
+	'texts',
+	'strings',
+	'errors',
+	'validationmessages',
+	'bundle',
+]);
 
 const SECRET_FILENAMES = new Set([
 	'.env', '.netrc', '.npmrc', '.pypirc', '.yarnrc', '.htpasswd', '.pgpass', '.my.cnf',
@@ -105,11 +115,11 @@ const SECRET_FILENAME_PATTERNS = [
 	/^\.env(\.|$)/,
 	/^\.yarnrc(\.|$)/,
 	/^id_[a-z0-9]+$/,
-	/^appsettings([._-].*)?\.json$/,
+	/^appsettings(?:[._-][a-z0-9._-]*)?\.json$/,
 	/^service[._-]?account[a-z0-9._-]*\.json$/,
-	/^wp-config([._-].*)?\.php$/,
+	/^wp-config(?:[._-][a-z0-9._-]*)?\.php$/,
 	/^(dbconfig|databaseconfig|firebaseconfig)([._-]|$)/,
-	/^([a-z0-9]+_)?(settings|config)\.py$/,
+	/^(?:[a-z0-9]+_)?(?:settings|config)\.py$/,
 	/\.tfvars\.json$/,
 	/\.tfstate\.backup$/,
 ];
@@ -126,7 +136,7 @@ export function isSensitiveFile(filePath: string): boolean {
 	const extension = extensionOf(name);
 
 	if (SECRET_FILENAMES.has(name)
-		|| (SECRET_EXTENSIONS.has(extension) && !TRANSLATION_BUNDLE.test(name))
+		|| (SECRET_EXTENSIONS.has(extension) && !isTranslationBundle(name))
 		|| (SECRET_WORDS.test(name) && !TYPE_DECLARATION.test(name))
 		|| SECRET_FILENAME_PATTERNS.some((pattern) => pattern.test(name))) {
 		return true;
@@ -155,13 +165,127 @@ const PGP_PRIVATE_KEY = /-----BEGIN PGP PRIVATE KEY BLOCK-----/;
 const HTPASSWD_HASH = /(?:^|\n)[^:\s\n]+:\$(?:apr1|2[aby]|6|5|1)\$/;
 const HTPASSWD_SHA = /(?:^|\n)[^:\s\n]+:\{S?SHA\}/;
 const PHP_DEFINE = /define\s*\(\s*['"]([A-Za-z_][A-Za-z0-9_]+)['"]\s*,\s*['"]([^'"]+)['"]/g;
-const NETRC_PASSWORD = /^\s*password\s+(\S+)/im;
+
+function parseNetrcPasswordValue(line: string): string | undefined {
+	const trimmed = line.trim();
+	if (!trimmed || trimmed.startsWith('#')) {
+		return undefined;
+	}
+
+	const keyword = 'password';
+	if (trimmed.length <= keyword.length || trimmed.slice(0, keyword.length).toLowerCase() !== keyword) {
+		return undefined;
+	}
+
+	let cursor = keyword.length;
+	while (cursor < trimmed.length && (trimmed[cursor] === ' ' || trimmed[cursor] === '\t')) {
+		cursor += 1;
+	}
+	if (cursor >= trimmed.length) {
+		return undefined;
+	}
+
+	let value = '';
+	for (let index = cursor; index < trimmed.length; index++) {
+		const char = trimmed[index];
+		if (char === ' ' || char === '\t' || char === '\r' || char === '\n') {
+			break;
+		}
+		value += char;
+	}
+
+	return value || undefined;
+}
+
+function extractNetrcPassword(content: string): string | undefined {
+	for (const rawLine of content.split(/\r\n|\r|\n/)) {
+		const value = parseNetrcPasswordValue(rawLine);
+		if (value !== undefined && !isInertValue(value)) {
+			return value;
+		}
+	}
+	return undefined;
+}
+
+function extractAssignmentPair(line: string): { key: string; value: string } | undefined {
+	const trimmed = line.trim();
+	if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('*')) {
+		return undefined;
+	}
+
+	let separatorIndex = -1;
+	for (let index = 0; index < trimmed.length; index++) {
+		const char = trimmed[index];
+		if (char === '=' || char === ':') {
+			separatorIndex = index;
+			break;
+		}
+	}
+	if (separatorIndex <= 0) {
+		return undefined;
+	}
+
+	const keyPart = trimmed.slice(0, separatorIndex).trim();
+	const keyStart = Math.max(keyPart.lastIndexOf(' '), keyPart.lastIndexOf('\t')) + 1;
+	const key = keyPart.slice(keyStart).replace(/^['"]|['"]$/g, '');
+	const value = trimmed.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '');
+	if (!key || !value) {
+		return undefined;
+	}
+
+	return { key, value };
+}
 
 function normalizeSecretKey(key: string): string {
 	return key
 		.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
 		.replace(/[-./]/g, '_')
 		.toLowerCase();
+}
+
+function isTwoPartLocaleSuffix(value: string): boolean {
+	if (value.length !== 2 && value.length !== 5) {
+		return false;
+	}
+
+	for (let index = 0; index < value.length; index++) {
+		const char = value.charCodeAt(index);
+		if (index === 2) {
+			if (char !== 95) {
+				return false;
+			}
+			continue;
+		}
+		const isLetter = char >= 97 && char <= 122;
+		if (!isLetter) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+function isTranslationBundle(name: string): boolean {
+	if (!name.endsWith('.properties')) {
+		return false;
+	}
+
+	const stem = name.slice(0, -'.properties'.length);
+	for (const prefix of TRANSLATION_BUNDLE_PREFIXES) {
+		if (stem === prefix) {
+			return true;
+		}
+		if (stem.startsWith(`${prefix}.`) || stem.startsWith(`${prefix}_`) || stem.startsWith(`${prefix}-`)) {
+			return true;
+		}
+	}
+
+	const localeSeparator = Math.max(stem.lastIndexOf('_'), stem.lastIndexOf('-'));
+	if (localeSeparator === -1) {
+		return false;
+	}
+
+	return isTwoPartLocaleSuffix(stem.slice(localeSeparator + 1));
 }
 
 export function isSecretKeyName(key: string): boolean {
@@ -195,7 +319,10 @@ export function isSecretKeyName(key: string): boolean {
 }
 
 function isInertValue(value: string): boolean {
-	const trimmed = value.trim().replace(/^['"`]|['"`]$/g, '').replace(/[,;]+$/, '').trim();
+	let trimmed = value.trim().replace(/^['"`]|['"`]$/g, '').trim();
+	while (trimmed.endsWith(',') || trimmed.endsWith(';')) {
+		trimmed = trimmed.slice(0, -1).trimEnd();
+	}
 	if (trimmed.length < 3) {
 		return true;
 	}
@@ -205,16 +332,37 @@ function isInertValue(value: string): boolean {
 		|| /^(process\.env|os\.environ|system\.getenv)\b/i.test(trimmed);
 }
 
-const EMBEDDED_CREDENTIAL = /[a-z][a-z0-9+.-]*:\/\/([^/\s:]+):([^/\s@]+)@/i;
-
 export function valueHoldsEmbeddedCredential(value: string): boolean {
 	const trimmed = value.trim().replace(/^['"`]|['"`]$/g, '');
-	const match = EMBEDDED_CREDENTIAL.exec(trimmed);
-	if (!match) {
+	const schemeSeparator = trimmed.indexOf('://');
+	if (schemeSeparator <= 0) {
 		return false;
 	}
 
-	return !isInertValue(match[2]);
+	const scheme = trimmed.slice(0, schemeSeparator);
+	if (!/^[a-z][a-z0-9+.-]*$/i.test(scheme)) {
+		return false;
+	}
+
+	const authority = trimmed.slice(schemeSeparator + 3);
+	const atIndex = authority.indexOf('@');
+	if (atIndex <= 0) {
+		return false;
+	}
+
+	const credentials = authority.slice(0, atIndex);
+	const colonIndex = credentials.indexOf(':');
+	if (colonIndex <= 0) {
+		return false;
+	}
+
+	const user = credentials.slice(0, colonIndex);
+	const password = credentials.slice(colonIndex + 1);
+	if (!user || !password || /[\s/@:]/.test(user) || /[\s@]/.test(password)) {
+		return false;
+	}
+
+	return !isInertValue(password);
 }
 
 function pairLooksSensitive(key: string, value: string): boolean {
@@ -255,6 +403,21 @@ function jsonHoldsSecrets(content: string): boolean {
 	}
 }
 
+function jsonObjectHoldsSecrets(value: object): boolean {
+	for (const [key, child] of Object.entries(value)) {
+		if (typeof child === 'string' && pairLooksSensitive(key, child)) {
+			return true;
+		}
+		if (isSecretKeyName(key) && hasNonInertString(child)) {
+			return true;
+		}
+		if (jsonValueHoldsSecrets(child)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function jsonValueHoldsSecrets(value: unknown): boolean {
 	if (typeof value === 'string') {
 		return valueHoldsEmbeddedCredential(value);
@@ -263,17 +426,7 @@ function jsonValueHoldsSecrets(value: unknown): boolean {
 		return value.some(jsonValueHoldsSecrets);
 	}
 	if (value && typeof value === 'object') {
-		for (const [key, child] of Object.entries(value)) {
-			if (typeof child === 'string' && pairLooksSensitive(key, child)) {
-				return true;
-			}
-			if (isSecretKeyName(key) && hasNonInertString(child)) {
-				return true;
-			}
-			if (jsonValueHoldsSecrets(child)) {
-				return true;
-			}
-		}
+		return jsonObjectHoldsSecrets(value);
 	}
 	return false;
 }
@@ -286,29 +439,13 @@ function assignmentsHoldSecrets(content: string): boolean {
 		}
 	}
 
-	const netrc = NETRC_PASSWORD.exec(content);
-	if (netrc && !isInertValue(netrc[1])) {
+	if (extractNetrcPassword(content)) {
 		return true;
 	}
 
 	for (const rawLine of content.split(/\r\n|\r|\n/)) {
-		const line = rawLine.trim();
-		if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('*')) {
-			continue;
-		}
-
-		const env = /^(?:export\s+|setx?\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*?)$/.exec(line);
-		if (env && pairLooksSensitive(env[1], env[2])) {
-			return true;
-		}
-
-		const yaml = /^["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:\s*(.*?)$/.exec(line);
-		if (yaml && pairLooksSensitive(yaml[1], yaml[2])) {
-			return true;
-		}
-
-		const assignment = /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]([^'"]+)['"]/.exec(line);
-		if (assignment && pairLooksSensitive(assignment[1], assignment[2])) {
+		const pair = extractAssignmentPair(rawLine);
+		if (pair && pairLooksSensitive(pair.key, pair.value)) {
 			return true;
 		}
 	}
@@ -343,18 +480,12 @@ export function explainSensitiveContent(content: string): { check: SensitiveCont
 	}
 
 	for (const rawLine of content.split(/\r\n|\r|\n/)) {
+		const pair = extractAssignmentPair(rawLine);
+		if (!pair || !pairLooksSensitive(pair.key, pair.value)) {
+			continue;
+		}
 		const line = rawLine.trim();
-		if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('*')) {
-			continue;
-		}
-		const env = /^(?:export\s+|setx?\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*?)$/.exec(line);
-		const yaml = /^["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:\s*(.*?)$/.exec(line);
-		const assignment = /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]([^'"]+)['"]/.exec(line);
-		const pair = env ?? yaml ?? assignment;
-		if (!pair || !pairLooksSensitive(pair[1], pair[2])) {
-			continue;
-		}
-		if (valueHoldsEmbeddedCredential(pair[2])) {
+		if (valueHoldsEmbeddedCredential(pair.value)) {
 			return { check: 'connection-string', line };
 		}
 		return { check: 'assignmentsHoldSecrets', line };
@@ -551,11 +682,16 @@ function formatCount(value: number): string {
 }
 
 export function sanitizeCsvProjectName(name: string): string {
-	const cleaned = name
+	let cleaned = name
 		.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
 		.replace(/\s+/g, '_')
-		.replace(/_+/g, '_')
-		.replace(/^[_]+|[_]+$/g, '');
+		.replace(/_+/g, '_');
+	while (cleaned.startsWith('_')) {
+		cleaned = cleaned.slice(1);
+	}
+	while (cleaned.endsWith('_')) {
+		cleaned = cleaned.slice(0, -1);
+	}
 	return cleaned || 'Project';
 }
 
@@ -1039,4 +1175,8 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+	statisticsPanel?.dispose();
+	statisticsPanel = undefined;
+	statisticsSidebar = undefined;
+}

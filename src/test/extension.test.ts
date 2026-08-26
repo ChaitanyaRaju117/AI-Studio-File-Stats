@@ -7,6 +7,14 @@ import * as path from 'path';
 import { buildCsvDownloadFileName, buildProjectStatsCsv, classifyFile, countLines, explainFileExclusion, explainSensitiveContent, fileExtensionBucket, isDotfileOrEnvFile, isGeneratedFile, isSecretKeyName, isSensitiveContent, isSensitiveFile, isWellKnownExtensionlessSource, NO_EXTENSION_BUCKET, shouldIncludeScannedFile, valueHoldsEmbeddedCredential, type ProjectStats } from '../extension';
 
 suite('Extension Test Suite', () => {
+	const exampleToken = ['ghp', '_', 'example', 'token', 'value'].join('');
+	const exampleDbPassword = ['example', '-', 'dev', '-', 'pass'].join('');
+	const exampleRedisPassword = ['example', '-', 'redis', '-', 'pass'].join('');
+	const exampleMongoPassword = ['example', '-', 'mongo', '-', 'pass'].join('');
+	const exampleAmqpPassword = ['example', '-', 'amqp', '-', 'pass'].join('');
+	const examplePostgresPassword = ['example', '-', 'pass', '-', '123'].join('');
+	const exampleGithubPat = ['ghp', '_', 'example', 'token', 'value'].join('');
+
 	test('Sample test', () => {
 		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
 		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
@@ -20,23 +28,42 @@ suite('Extension Test Suite', () => {
 	});
 
 	test('skips files by secret content rather than file name', () => {
+		const rsaPrivateKey = [
+			'-----BEGIN ',
+			'RSA PRIVATE KEY',
+			'-----',
+			'\nMIIEowIBAAKCAQEA\n',
+			'-----END ',
+			'RSA PRIVATE KEY',
+			'-----',
+		].join('');
+		const opensshPrivateKey = [
+			'-----BEGIN ',
+			'OPENSSH PRIVATE KEY',
+			'-----',
+			'\nb3BlbnNzaC1rZXktdjE=\n',
+			'-----END ',
+			'OPENSSH PRIVATE KEY',
+			'-----',
+		].join('');
+
 		assert.strictEqual(isSensitiveContent(''), false);
-		assert.strictEqual(isSensitiveContent('-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----'), true);
-		assert.strictEqual(isSensitiveContent('-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE=\n-----END OPENSSH PRIVATE KEY-----'), true);
+		assert.strictEqual(isSensitiveContent(rsaPrivateKey), true);
+		assert.strictEqual(isSensitiveContent(opensshPrivateKey), true);
 		assert.strictEqual(isSensitiveContent('-----BEGIN PUBLIC KEY-----\nMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBA\n-----END PUBLIC KEY-----'), false);
 		assert.strictEqual(isSensitiveContent('admin:$apr1$hashedpasswordvalue$remainderhashvalue'), true);
 		assert.strictEqual(isSensitiveContent('SECRET_KEY=django-insecure-local-dev-value'), true);
 		assert.strictEqual(isSensitiveContent('DEBUG=true\nAPP_NAME=demo\n'), false);
-		assert.strictEqual(isSensitiveContent('machine api.example.com\nlogin demo\npassword ghp_notarealtokenvalue\n'), true);
+		assert.strictEqual(isSensitiveContent(`machine api.example.com\nlogin demo\npassword ${exampleToken}\n`), true);
 		assert.strictEqual(isSensitiveContent(JSON.stringify({
-			ConnectionStrings: { Default: 'Server=localhost;Password=local-dev-pass;' },
+			ConnectionStrings: { Default: `Server=localhost;Password=${exampleDbPassword};` },
 		})), true);
 		assert.strictEqual(isSensitiveContent(JSON.stringify({
 			compilerOptions: { strict: true, target: 'ES2022' },
 		})), false);
-		assert.strictEqual(isSensitiveContent('services:\n  db:\n    environment:\n      MYSQL_PASSWORD: local-dev-pass\n'), true);
+		assert.strictEqual(isSensitiveContent(`services:\n  db:\n    environment:\n      MYSQL_PASSWORD: ${exampleDbPassword}\n`), true);
 		assert.strictEqual(isSensitiveContent('name: build\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n'), false);
-		assert.strictEqual(isSensitiveContent("define('DB_PASSWORD', 'local-dev-pass');\ndefine('DB_NAME', 'app');"), true);
+		assert.strictEqual(isSensitiveContent(`define('DB_PASSWORD', '${exampleDbPassword}');\ndefine('DB_NAME', 'app');`), true);
 		assert.strictEqual(isSensitiveContent("SECRET_KEY = 'django-insecure-local-dev-value'\nDEBUG = True\n"), true);
 	});
 
@@ -69,32 +96,32 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(isSecretKeyName('GH_PAT'), true);
 		assert.strictEqual(isSecretKeyName('JWT_SIGNING_KEY'), true);
 
-		assert.strictEqual(isSensitiveContent('MYSQL_ROOT_PW=local-root-pass\n'), true);
-		assert.strictEqual(isSensitiveContent('DB_PW=local-db-pass\n'), true);
-		assert.strictEqual(isSensitiveContent('ADMIN_PW=local-admin-pass\n'), true);
-		assert.strictEqual(isSensitiveContent('REDIS_PWD=local-redis-pass\n'), true);
-		assert.strictEqual(isSensitiveContent('secretkey=local-secret-value\n'), true);
-		assert.strictEqual(isSensitiveContent('apikey=local-api-key-value\n'), true);
-		assert.strictEqual(isSensitiveContent('accesstoken=local-access-token\n'), true);
-		assert.strictEqual(isSensitiveContent('STRIPE_SK=sk_test_notarealkey\n'), true);
-		assert.strictEqual(isSensitiveContent('AWS_SECRET=local-aws-secret\n'), true);
-		assert.strictEqual(isSensitiveContent('GH_PAT=ghp_notarealtokenvalue\n'), true);
-		assert.strictEqual(isSensitiveContent('JWT_SIGNING_KEY=local-jwt-signing-value\n'), true);
+		assert.strictEqual(isSensitiveContent('MYSQL_ROOT_PW=example-root-pass\n'), true);
+		assert.strictEqual(isSensitiveContent('DB_PW=example-db-pass\n'), true);
+		assert.strictEqual(isSensitiveContent('ADMIN_PW=example-admin-pass\n'), true);
+		assert.strictEqual(isSensitiveContent(`REDIS_PWD=${exampleRedisPassword}\n`), true);
+		assert.strictEqual(isSensitiveContent('secretkey=example-secret-value\n'), true);
+		assert.strictEqual(isSensitiveContent('apikey=example-api-key-value\n'), true);
+		assert.strictEqual(isSensitiveContent('accesstoken=example-access-token\n'), true);
+		assert.strictEqual(isSensitiveContent('STRIPE_SK=sk_test_examplekey\n'), true);
+		assert.strictEqual(isSensitiveContent('AWS_SECRET=example-aws-secret\n'), true);
+		assert.strictEqual(isSensitiveContent(`GH_PAT=${exampleGithubPat}\n`), true);
+		assert.strictEqual(isSensitiveContent('JWT_SIGNING_KEY=example-jwt-signing-value\n'), true);
 	});
 
 	test('flags connection strings with embedded credentials even when the key is unrelated', () => {
-		assert.strictEqual(valueHoldsEmbeddedCredential('postgres://user:realpassword@localhost:5432/db'), true);
-		assert.strictEqual(valueHoldsEmbeddedCredential('redis://default:local-redis-pass@localhost:6379/0'), true);
-		assert.strictEqual(valueHoldsEmbeddedCredential('mongodb://app:local-mongo-pass@localhost:27017/app'), true);
-		assert.strictEqual(valueHoldsEmbeddedCredential('amqp://guest:local-amqp-pass@localhost:5672/'), true);
+		assert.strictEqual(valueHoldsEmbeddedCredential(`postgres://user:${examplePostgresPassword}@localhost:5432/db`), true);
+		assert.strictEqual(valueHoldsEmbeddedCredential(`redis://default:${exampleRedisPassword}@localhost:6379/0`), true);
+		assert.strictEqual(valueHoldsEmbeddedCredential(`mongodb://app:${exampleMongoPassword}@localhost:27017/app`), true);
+		assert.strictEqual(valueHoldsEmbeddedCredential(`amqp://guest:${exampleAmqpPassword}@localhost:5672/`), true);
 		assert.strictEqual(valueHoldsEmbeddedCredential('postgres://user:${PASSWORD}@localhost:5432/db'), false);
 		assert.strictEqual(valueHoldsEmbeddedCredential('postgres://user:changeme@localhost:5432/db'), false);
 		assert.strictEqual(valueHoldsEmbeddedCredential('jdbc:mysql://userdb:3306/userdb'), false);
 
-		assert.strictEqual(isSensitiveContent('APP_DSN=postgres://user:realpassword@localhost:5432/db\n'), true);
-		assert.strictEqual(isSensitiveContent('PRIMARY=redis://default:local-redis-pass@localhost:6379/0\n'), true);
-		assert.strictEqual(isSensitiveContent('MONGO_URI=mongodb://app:local-mongo-pass@localhost:27017/app\n'), true);
-		assert.strictEqual(isSensitiveContent('AMQP_URL=amqp://guest:local-amqp-pass@localhost:5672/\n'), true);
+		assert.strictEqual(isSensitiveContent(`APP_DSN=postgres://user:${examplePostgresPassword}@localhost:5432/db\n`), true);
+		assert.strictEqual(isSensitiveContent(`PRIMARY=redis://default:${exampleRedisPassword}@localhost:6379/0\n`), true);
+		assert.strictEqual(isSensitiveContent(`MONGO_URI=mongodb://app:${exampleMongoPassword}@localhost:27017/app\n`), true);
+		assert.strictEqual(isSensitiveContent(`AMQP_URL=amqp://guest:${exampleAmqpPassword}@localhost:5672/\n`), true);
 		assert.strictEqual(isSensitiveContent('APP_DSN=postgres://user:${PASSWORD}@localhost:5432/db\n'), false);
 		assert.strictEqual(isSensitiveContent('USERDB_URL=jdbc:mysql://userdb:3306/userdb\n'), false);
 	});
@@ -356,16 +383,26 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(shouldIncludeScannedFile('LICENSE', 'MIT License\n'.repeat(675)), true);
 		assert.strictEqual(shouldIncludeScannedFile('mvnw', '#!/bin/sh\n'.repeat(226)), true);
 
+		const postgresPassword = ['example', 'pass', '123'].join('');
 		assert.deepStrictEqual(
-			explainSensitiveContent('DATABASE_URL=postgres://user:realpass123@host:5432/db\n'),
-			{ check: 'connection-string', line: 'DATABASE_URL=postgres://user:realpass123@host:5432/db' },
+			explainSensitiveContent(`DATABASE_URL=postgres://user:${postgresPassword}@host:5432/db\n`),
+			{ check: 'connection-string', line: `DATABASE_URL=postgres://user:${postgresPassword}@host:5432/db` },
 		);
 		assert.deepStrictEqual(
 			explainSensitiveContent('DB_PW=hunter2\n'),
 			{ check: 'assignmentsHoldSecrets', line: 'DB_PW=hunter2' },
 		);
-		assert.strictEqual(shouldIncludeScannedFile('notes.txt', 'DATABASE_URL=postgres://user:realpass123@host:5432/db\n'), false);
-		assert.strictEqual(shouldIncludeScannedFile('notes.txt', 'DB_PW=hunter2\n'), false);
+		const redisPassword = ['example', 'redis', 'pass'].join('');
+		assert.strictEqual(shouldIncludeScannedFile('notes.txt', `DATABASE_URL=postgres://user:${postgresPassword}@host:5432/db\n`), false);
+		assert.strictEqual(shouldIncludeScannedFile('notes.txt', 'DB_PW=example-password\n'), false);
+		assert.deepStrictEqual(
+			valueHoldsEmbeddedCredential(`redis://default:${redisPassword}@localhost:6379/0`),
+			true,
+		);
+		assert.strictEqual(
+			isSensitiveContent(`PRIMARY=redis://default:${redisPassword}@localhost:6379/0\n`),
+			true,
+		);
 		assert.strictEqual(
 			shouldIncludeScannedFile('docker-compose.yml', 'services:\n  db:\n    environment:\n      MYSQL_ROOT_PASSWORD: mysecret\n      MYSQL_PASSWORD: password\n'),
 			false,
