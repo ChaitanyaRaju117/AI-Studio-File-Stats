@@ -41,6 +41,14 @@ Line counts are based on physical lines in each file. Files that cannot be read,
 
 ## Release Notes
 
+### 0.0.14
+
+Hides the aicount sidebar as soon as the extension is uninstalled or deactivated, so file counts stop updating.
+
+### 0.0.13
+
+Clears the aicount sidebar and report when the extension is uninstalled or deactivated.
+
 ### 0.0.2
 
 Added all-file statistics, extension grouping, and an extension icon.

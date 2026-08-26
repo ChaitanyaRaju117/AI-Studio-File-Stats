@@ -995,6 +995,14 @@ class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
 		void this.refresh();
 	}
 
+	clear(): void {
+		this.resolved = false;
+		if (this.view) {
+			this.view.webview.html = '';
+			this.view = undefined;
+		}
+	}
+
 	renderSummary(stats?: ProjectStats): void {
 		if (!this.view) {
 			return;
@@ -1153,6 +1161,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "poc" is now active!');
+	void vscode.commands.executeCommand('setContext', 'aicount.enabled', true);
 
 	const sidebarProvider = new StatisticsSidebarProvider();
 	statisticsSidebar = sidebarProvider;
@@ -1169,14 +1178,25 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(StatisticsSidebarProvider.viewType, sidebarProvider, {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
+		{ dispose: shutdownAicountUi },
 	);
 
 	void showInstallPrompt(context);
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {
-	statisticsPanel?.dispose();
-	statisticsPanel = undefined;
+function shutdownAicountUi(): void {
+	void vscode.commands.executeCommand('setContext', 'aicount.enabled', false);
+	void vscode.commands.executeCommand('workbench.view.explorer');
+	statisticsRefresh = undefined;
+	statisticsPanelReady = false;
+	if (statisticsPanel) {
+		statisticsPanel.dispose();
+		statisticsPanel = undefined;
+	}
+	statisticsSidebar?.clear();
 	statisticsSidebar = undefined;
+}
+
+export function deactivate() {
+	shutdownAicountUi();
 }

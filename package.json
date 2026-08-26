@@ -3,7 +3,7 @@
   "displayName": "aicount",
   "publisher": "chaitanyarajuBahatam",
   "description": "Shows workspace file and line counts in the aicount sidebar, with a full report and CSV export",
-  "version": "0.0.8",
+  "version": "0.0.14",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"
@@ -36,19 +36,20 @@
         {
           "id": "aicount",
           "title": "aicount",
-          "icon": "media/activitybar.svg"
+          "icon": "media/activitybar.svg",
+          "when": "aicount.enabled"
         }
       ]
     },
     "views": {
       "aicount": [
-        {
-          "type": "webview",
-          "id": "aicount.sidebar",
-          "name": "Project Statistics",
-          "visibility": "visible",
-          "retainContextWhenHidden": true
-        }
+		{
+			"type": "webview",
+			"id": "aicount.sidebar",
+			"name": "Project Statistics",
+			"visibility": "visible",
+			"when": "aicount.enabled"
+		}
       ]
     },
     "menus": {
