@@ -27,71 +27,8 @@ export interface ProjectStats {
 
 let statisticsPanel: vscode.WebviewPanel | undefined;
 let statisticsSidebar: StatisticsSidebarProvider | undefined;
-
-const SOURCE_CODE_EXTENSIONS = new Set([
-	'.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte', '.astro',
-	'.py', '.pyi', '.rb', '.erb', '.php', '.java', '.kt', '.kts', '.scala', '.groovy',
-	'.clj', '.cljs', '.go', '.rs', '.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hh',
-	'.cs', '.fs', '.vb', '.swift', '.m', '.mm', '.dart', '.lua', '.pl', '.pm', '.r',
-	'.jl', '.ex', '.exs', '.erl', '.hs', '.ml', '.sh', '.bash', '.zsh', '.fish',
-	'.ps1', '.psm1', '.bat', '.cmd', '.sql', '.graphql', '.gql', '.proto', '.tf', '.hcl',
-	'.html', '.htm', '.css', '.scss', '.sass', '.less', '.styl', '.md', '.mdx', '.rst',
-]);
-
-const DATA_CONFIG_EXTENSIONS = new Set([
-	'.json', '.json5', '.jsonc', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf',
-	'.config', '.xml', '.plist', '.txt', '.csv', '.tsv',
-]);
-
-const SECRET_EXTENSIONS = new Set([
-	'.env', '.pem', '.key', '.ppk', '.p8', '.p12', '.pfx', '.crt', '.cer', '.der',
-	'.jks', '.keystore', '.truststore', '.kdbx', '.gpg', '.pgp', '.asc', '.ovpn',
-	'.mobileprovision', '.xcconfig', '.pubxml', '.publishsettings', '.properties',
-	'.tfvars', '.tfstate', '.netrc',
-]);
-
-// Java resource bundles share the .properties extension but hold translations, not secrets.
-const TRANSLATION_BUNDLE = /^(messages|labels|i18n|text|texts|strings|errors|validationmessages|bundle)([._-][a-z0-9_-]*)?\.properties$|_[a-z]{2}(_[a-z]{2})?\.properties$/;
-
-const SECRET_FILENAMES = new Set([
-	'.env', '.netrc', '.npmrc', '.pypirc', '.yarnrc', '.htpasswd', '.pgpass', '.my.cnf',
-	'.s3cfg', '.boto', '.dockercfg', '.git-credentials', '.aws-credentials',
-	'kubeconfig', 'known_hosts', 'parameters.yml', 'parameters.yaml',
-	'google-services.json', 'googleservice-info.plist',
-	// A Docker registry writes its basic-auth file without the Apache leading dot.
-	'htpasswd', 'htdigest',
-]);
-
-const SECRET_FILENAME_PATTERNS = [
-	/^\.env(\.|$)/,
-	/^\.yarnrc(\.|$)/,
-	/^id_[a-z0-9]+$/,
-	/^dockerfile(\.|$)/,
-	// docker-stack is the Swarm counterpart of docker-compose and carries the same environment values.
-	/^docker-(compose|stack)([._-]|$)/,
-	/^application([._-].*)?\.ya?ml$/,
-	/^bootstrap([._-].*)?\.ya?ml$/,
-	/^appsettings([._-].*)?\.json$/,
-	/^service[._-]?account[a-z0-9._-]*\.json$/,
-	/^wp-config([._-].*)?\.php$/,
-	/^(dbconfig|databaseconfig|firebaseconfig)([._-]|$)/,
-	/^([a-z0-9]+_)?(settings|config)\.py$/,
-	/\.tfvars\.json$/,
-	/\.tfstate\.backup$/,
-];
-
-// Words that identify the file itself as a secret store, whatever its extension.
-const SECRET_WORDS = /(^|[._-])(secret|secrets|credential|credentials|apikey|api_key|api_keys|api-key|api-keys|passwd)([._-]|$)/;
-
-// credentials.model.ts and friends declare a shape rather than holding one.
-const TYPE_DECLARATION = /\.(model|models|dto|interface|interfaces|type|types|enum|enums|schema)\.(ts|tsx|js|jsx)$/;
-
-// Words that only imply secrets in configuration/data files, never in source code.
-const CONFIG_SECRET_WORDS = /(^|[._-])(config|configuration|conf|settings|password|passwords|private|vault|auth|token)([._-]|$)/;
-
-const CREDENTIAL_DIRECTORIES = /(^|\/)(\.ssh|\.aws|\.gnupg|\.kube|\.docker|\.m2|\.cargo|secret|secrets|credential|credentials|creds|vault|certs|certificates|keys)(\/|$)/;
-
-const CONFIG_DIRECTORIES = /(^|\/)(config|configs|conf|configuration|settings|helm|charts)(\/|$)/;
+let statisticsRefresh: Promise<void> | undefined;
+let statisticsPanelReady = false;
 
 const GENERATED_DIRECTORIES = /(^|\/)(node_modules|bower_components|vendor|\.git|\.svn|\.hg|dist|build|out|target|obj|\.gradle|\.idea|\.vs|\.vscode-test|__pycache__|\.pytest_cache|\.mypy_cache|\.venv|venv|site-packages|coverage|\.nyc_output|\.next|\.nuxt|\.svelte-kit|\.turbo|\.terraform)(\/|$)/;
 
@@ -132,6 +69,57 @@ function extensionOf(fileName: string): string {
 	return lastDot > 0 ? fileName.slice(lastDot) : '';
 }
 
+const SOURCE_CODE_EXTENSIONS = new Set([
+	'.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte', '.astro',
+	'.py', '.pyi', '.rb', '.erb', '.php', '.java', '.kt', '.kts', '.scala', '.groovy',
+	'.clj', '.cljs', '.go', '.rs', '.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hh',
+	'.cs', '.fs', '.vb', '.swift', '.m', '.mm', '.dart', '.lua', '.pl', '.pm', '.r',
+	'.jl', '.ex', '.exs', '.erl', '.hs', '.ml', '.sh', '.bash', '.zsh', '.fish',
+	'.ps1', '.psm1', '.bat', '.cmd', '.sql', '.graphql', '.gql', '.proto', '.tf', '.hcl',
+	'.html', '.htm', '.css', '.scss', '.sass', '.less', '.styl', '.md', '.mdx', '.rst',
+]);
+
+const DATA_CONFIG_EXTENSIONS = new Set([
+	'.json', '.json5', '.jsonc', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf',
+	'.config', '.xml', '.plist', '.txt', '.csv', '.tsv',
+]);
+
+const SECRET_EXTENSIONS = new Set([
+	'.env', '.pem', '.key', '.ppk', '.p8', '.p12', '.pfx', '.crt', '.cer', '.der',
+	'.jks', '.keystore', '.truststore', '.kdbx', '.gpg', '.pgp', '.asc', '.ovpn',
+	'.mobileprovision', '.xcconfig', '.pubxml', '.publishsettings',
+	'.tfvars', '.tfstate', '.netrc',
+]);
+
+const TRANSLATION_BUNDLE = /^(messages|labels|i18n|text|texts|strings|errors|validationmessages|bundle)([._-][a-z0-9_-]*)?\.properties$|_[a-z]{2}(_[a-z]{2})?\.properties$/;
+
+const SECRET_FILENAMES = new Set([
+	'.env', '.netrc', '.npmrc', '.pypirc', '.yarnrc', '.htpasswd', '.pgpass', '.my.cnf',
+	'.s3cfg', '.boto', '.dockercfg', '.git-credentials', '.aws-credentials',
+	'kubeconfig', 'known_hosts', 'parameters.yml', 'parameters.yaml',
+	'google-services.json', 'googleservice-info.plist',
+	'htpasswd', 'htdigest',
+]);
+
+const SECRET_FILENAME_PATTERNS = [
+	/^\.env(\.|$)/,
+	/^\.yarnrc(\.|$)/,
+	/^id_[a-z0-9]+$/,
+	/^appsettings([._-].*)?\.json$/,
+	/^service[._-]?account[a-z0-9._-]*\.json$/,
+	/^wp-config([._-].*)?\.php$/,
+	/^(dbconfig|databaseconfig|firebaseconfig)([._-]|$)/,
+	/^([a-z0-9]+_)?(settings|config)\.py$/,
+	/\.tfvars\.json$/,
+	/\.tfstate\.backup$/,
+];
+
+const SECRET_WORDS = /(^|[._-])(secret|secrets|credential|credentials|apikey|api_key|api_keys|api-key|api-keys|passwd)([._-]|$)/;
+const TYPE_DECLARATION = /\.(model|models|dto|interface|interfaces|type|types|enum|enums|schema)\.(ts|tsx|js|jsx)$/;
+const CONFIG_SECRET_WORDS = /(^|[._-])(config|configuration|settings|password|passwords|private|vault|auth|token)([._-]|$)/;
+const CREDENTIAL_DIRECTORIES = /(^|\/)(\.ssh|\.aws|\.gnupg|\.kube|\.docker|\.m2|\.cargo|secret|secrets|credential|credentials|creds|vault|certs|certificates|keys)(\/|$)/;
+const CONFIG_DIRECTORIES = /(^|\/)(config|configs|conf|configuration|settings|helm|charts)(\/|$)/;
+
 export function isSensitiveFile(filePath: string): boolean {
 	const path = normalizePath(filePath);
 	const name = fileNameOf(path);
@@ -144,7 +132,6 @@ export function isSensitiveFile(filePath: string): boolean {
 		return true;
 	}
 
-	// Django settings packages and Flask instance folders hold SECRET_KEY and database URIs.
 	if (/(^|\/)(settings|instance)\/[^/]+\.py$/.test(path)) {
 		return true;
 	}
@@ -162,6 +149,248 @@ export function isSensitiveFile(filePath: string): boolean {
 	return CONFIG_SECRET_WORDS.test(name) || CONFIG_DIRECTORIES.test(path);
 }
 
+const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/;
+const OPENSSH_PRIVATE_KEY = /-----BEGIN OPENSSH PRIVATE KEY-----/;
+const PGP_PRIVATE_KEY = /-----BEGIN PGP PRIVATE KEY BLOCK-----/;
+const HTPASSWD_HASH = /(?:^|\n)[^:\s\n]+:\$(?:apr1|2[aby]|6|5|1)\$/;
+const HTPASSWD_SHA = /(?:^|\n)[^:\s\n]+:\{S?SHA\}/;
+const PHP_DEFINE = /define\s*\(\s*['"]([A-Za-z_][A-Za-z0-9_]+)['"]\s*,\s*['"]([^'"]+)['"]/g;
+const NETRC_PASSWORD = /^\s*password\s+(\S+)/im;
+
+function normalizeSecretKey(key: string): string {
+	return key
+		.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+		.replace(/[-./]/g, '_')
+		.toLowerCase();
+}
+
+export function isSecretKeyName(key: string): boolean {
+	const normalized = normalizeSecretKey(key);
+	if (!normalized) {
+		return false;
+	}
+
+	const compact = normalized.replace(/_/g, '');
+
+	if (/(?:^|_)(?:password|passwd|pwd|pw|secret|secrets|token|tokens|credential|credentials|api_key|apikey|access_key|private_key|secret_key|auth_token|access_token|client_secret|client_key_data|connection_string|database_url|db_password|db_url|master_key|auth_key|signing_key|pat|sk)(?:s|_value|_data)?$/.test(normalized)) {
+		return true;
+	}
+	if (/^(?:password|passwd|pwd|pw|secret|secrets|token|tokens|credentials?|api_keys?|pat|sk)$/.test(normalized)) {
+		return true;
+	}
+	if (/_auth_?token$/.test(normalized)) {
+		return true;
+	}
+	if (normalized.includes('private_key')
+		|| normalized.includes('client_secret')
+		|| normalized.includes('secret_key')
+		|| normalized.includes('access_key')
+		|| normalized.includes('signing_key')) {
+		return true;
+	}
+
+	return /(?:api|access|auth|private|secret|client|master|signing)keys?$/.test(compact)
+		|| /(?:access|auth|id|refresh|session|api)tokens?$/.test(compact)
+		|| /(?:client|api|app)secrets?$/.test(compact);
+}
+
+function isInertValue(value: string): boolean {
+	const trimmed = value.trim().replace(/^['"`]|['"`]$/g, '').replace(/[,;]+$/, '').trim();
+	if (trimmed.length < 3) {
+		return true;
+	}
+
+	return /^\$\{|^\$\(|^\{\{|^<%|^<[^>]+>$/.test(trimmed)
+		|| /^(true|false|null|none|undefined|nil|string|number|boolean|any|object|bool|int|integer|float|str|bytes|changeme|placeholder|example|todo|xxx+|your[_-].+)$/i.test(trimmed)
+		|| /^(process\.env|os\.environ|system\.getenv)\b/i.test(trimmed);
+}
+
+const EMBEDDED_CREDENTIAL = /[a-z][a-z0-9+.-]*:\/\/([^/\s:]+):([^/\s@]+)@/i;
+
+export function valueHoldsEmbeddedCredential(value: string): boolean {
+	const trimmed = value.trim().replace(/^['"`]|['"`]$/g, '');
+	const match = EMBEDDED_CREDENTIAL.exec(trimmed);
+	if (!match) {
+		return false;
+	}
+
+	return !isInertValue(match[2]);
+}
+
+function pairLooksSensitive(key: string, value: string): boolean {
+	if (isInertValue(value)) {
+		return false;
+	}
+
+	return isSecretKeyName(key) || valueHoldsEmbeddedCredential(value);
+}
+
+function hasNonInertString(value: unknown, depth = 0): boolean {
+	if (depth > 12 || value === null || value === undefined) {
+		return false;
+	}
+	if (typeof value === 'string') {
+		return !isInertValue(value);
+	}
+	if (typeof value !== 'object') {
+		return false;
+	}
+	if (Array.isArray(value)) {
+		return value.some((item) => hasNonInertString(item, depth + 1));
+	}
+
+	return Object.values(value).some((item) => hasNonInertString(item, depth + 1));
+}
+
+function jsonHoldsSecrets(content: string): boolean {
+	const trimmed = content.trim();
+	if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+		return false;
+	}
+
+	try {
+		return jsonValueHoldsSecrets(JSON.parse(trimmed));
+	} catch {
+		return false;
+	}
+}
+
+function jsonValueHoldsSecrets(value: unknown): boolean {
+	if (typeof value === 'string') {
+		return valueHoldsEmbeddedCredential(value);
+	}
+	if (Array.isArray(value)) {
+		return value.some(jsonValueHoldsSecrets);
+	}
+	if (value && typeof value === 'object') {
+		for (const [key, child] of Object.entries(value)) {
+			if (typeof child === 'string' && pairLooksSensitive(key, child)) {
+				return true;
+			}
+			if (isSecretKeyName(key) && hasNonInertString(child)) {
+				return true;
+			}
+			if (jsonValueHoldsSecrets(child)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+function assignmentsHoldSecrets(content: string): boolean {
+	PHP_DEFINE.lastIndex = 0;
+	for (const match of content.matchAll(PHP_DEFINE)) {
+		if (pairLooksSensitive(match[1], match[2])) {
+			return true;
+		}
+	}
+
+	const netrc = NETRC_PASSWORD.exec(content);
+	if (netrc && !isInertValue(netrc[1])) {
+		return true;
+	}
+
+	for (const rawLine of content.split(/\r\n|\r|\n/)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('*')) {
+			continue;
+		}
+
+		const env = /^(?:export\s+|setx?\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*?)$/.exec(line);
+		if (env && pairLooksSensitive(env[1], env[2])) {
+			return true;
+		}
+
+		const yaml = /^["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:\s*(.*?)$/.exec(line);
+		if (yaml && pairLooksSensitive(yaml[1], yaml[2])) {
+			return true;
+		}
+
+		const assignment = /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]([^'"]+)['"]/.exec(line);
+		if (assignment && pairLooksSensitive(assignment[1], assignment[2])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function isSensitiveContent(content: string): boolean {
+	return explainSensitiveContent(content) !== undefined;
+}
+
+export type SensitiveContentCheck =
+	| 'PRIVATE_KEY_BLOCK'
+	| 'HTPASSWD'
+	| 'jsonHoldsSecrets'
+	| 'assignmentsHoldSecrets'
+	| 'connection-string';
+
+export function explainSensitiveContent(content: string): { check: SensitiveContentCheck; line?: string } | undefined {
+	if (!content) {
+		return undefined;
+	}
+
+	if (PRIVATE_KEY_BLOCK.test(content) || OPENSSH_PRIVATE_KEY.test(content) || PGP_PRIVATE_KEY.test(content)) {
+		return { check: 'PRIVATE_KEY_BLOCK' };
+	}
+	if (HTPASSWD_HASH.test(content) || HTPASSWD_SHA.test(content)) {
+		return { check: 'HTPASSWD' };
+	}
+	if (jsonHoldsSecrets(content)) {
+		return { check: 'jsonHoldsSecrets' };
+	}
+
+	for (const rawLine of content.split(/\r\n|\r|\n/)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('*')) {
+			continue;
+		}
+		const env = /^(?:export\s+|setx?\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*?)$/.exec(line);
+		const yaml = /^["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:\s*(.*?)$/.exec(line);
+		const assignment = /\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]([^'"]+)['"]/.exec(line);
+		const pair = env ?? yaml ?? assignment;
+		if (!pair || !pairLooksSensitive(pair[1], pair[2])) {
+			continue;
+		}
+		if (valueHoldsEmbeddedCredential(pair[2])) {
+			return { check: 'connection-string', line };
+		}
+		return { check: 'assignmentsHoldSecrets', line };
+	}
+
+	if (assignmentsHoldSecrets(content)) {
+		return { check: 'assignmentsHoldSecrets' };
+	}
+
+	return undefined;
+}
+
+export function explainFileExclusion(relativePath: string, content: string): {
+	skipped: boolean;
+	by?: 'generated' | 'env-filename' | 'sensitive-filename' | 'binary' | 'sensitive-content';
+	detail?: { check: SensitiveContentCheck; line?: string };
+} {
+	if (isGeneratedFile(relativePath)) {
+		return { skipped: true, by: 'generated' };
+	}
+	if (isDotfileOrEnvFile(relativePath)) {
+		return { skipped: true, by: 'env-filename' };
+	}
+	if (isSensitiveFile(relativePath)) {
+		return { skipped: true, by: 'sensitive-filename' };
+	}
+	if (looksBinary(new TextEncoder().encode(content))) {
+		return { skipped: true, by: 'binary' };
+	}
+	const detail = explainSensitiveContent(content);
+	if (detail) {
+		return { skipped: true, by: 'sensitive-content', detail };
+	}
+	return { skipped: false };
+}
+
 export function isGeneratedFile(filePath: string): boolean {
 	const path = normalizePath(filePath);
 	const name = fileNameOf(path);
@@ -177,6 +406,47 @@ export function isGeneratedFile(filePath: string): boolean {
 
 function looksBinary(content: Uint8Array): boolean {
 	return content.subarray(0, 8000).includes(0);
+}
+
+export const NO_EXTENSION_BUCKET = 'No extension';
+
+const WELL_KNOWN_EXTENSIONLESS_SOURCES = new Set([
+	'dockerfile',
+	'makefile',
+	'rakefile',
+	'jenkinsfile',
+	'vagrantfile',
+	'procfile',
+]);
+
+export function isWellKnownExtensionlessSource(fileName: string): boolean {
+	return WELL_KNOWN_EXTENSIONLESS_SOURCES.has(fileName.toLowerCase());
+}
+
+export function fileExtensionBucket(fileName: string): string {
+	if (fileName.includes('.') && !fileName.startsWith('.')) {
+		return `.${fileName.split('.').pop()?.toLowerCase()}`;
+	}
+	return NO_EXTENSION_BUCKET;
+}
+
+export function isDotfileOrEnvFile(filePath: string): boolean {
+	const name = fileNameOf(normalizePath(filePath));
+	return name === 'env'
+		|| name === '.env'
+		|| name.startsWith('.env.')
+		|| name.endsWith('.env')
+		|| name.includes('.env.');
+}
+
+export function shouldIncludeScannedFile(relativePath: string, content: string): boolean {
+	if (isGeneratedFile(relativePath) || isDotfileOrEnvFile(relativePath) || isSensitiveFile(relativePath)) {
+		return false;
+	}
+	if (looksBinary(new TextEncoder().encode(content))) {
+		return false;
+	}
+	return !isSensitiveContent(content);
 }
 
 // Extensions that settle the question on their own, whichever directory they sit in. A Spring
@@ -222,20 +492,20 @@ async function collectProjectStats(): Promise<ProjectStats> {
 		const separator = displayPath.lastIndexOf('/');
 		const name = separator === -1 ? displayPath : displayPath.slice(separator + 1);
 		const directory = separator === -1 ? '' : displayPath.slice(0, separator);
-		if (isSensitiveFile(relativePath) || isGeneratedFile(relativePath)) {
+		if (isGeneratedFile(relativePath) || isDotfileOrEnvFile(relativePath) || isSensitiveFile(relativePath)) {
 			continue;
 		}
 
-		const extension = name.includes('.') && !name.startsWith('.')
-			? `.${name.split('.').pop()?.toLowerCase()}`
-			: '[no extension]';
-		if (extension === '[no extension]') {
-			continue;
-		}
+		const extension = fileExtensionBucket(name);
 
 		try {
-			const content = await vscode.workspace.fs.readFile(uri);
-			if (looksBinary(content)) {
+			const bytes = await vscode.workspace.fs.readFile(uri);
+			if (looksBinary(bytes)) {
+				continue;
+			}
+
+			const text = new TextDecoder().decode(bytes);
+			if (isSensitiveContent(text)) {
 				continue;
 			}
 
@@ -244,7 +514,7 @@ async function collectProjectStats(): Promise<ProjectStats> {
 				directory,
 				extension,
 				area: classifyFile(relativePath, extension),
-				lines: countLines(new TextDecoder().decode(content)),
+				lines: countLines(text),
 			});
 		} catch {
 			// Ignore files that cannot be read.
@@ -301,25 +571,78 @@ export function buildProjectStatsCsv(stats: ProjectStats): string {
 		`Total Files,${stats.files.length}`,
 		`Total Lines,${stats.totalLines}`,
 		'',
-		'Name,No. of lines',
+		'Name,Extension,No. of lines',
 	];
 	for (const file of stats.files) {
-		rows.push(`${escapeCsvCell(file.name)},${file.lines}`);
+		rows.push(`${escapeCsvCell(file.name)},${escapeCsvCell(file.extension)},${file.lines}`);
 	}
 	return rows.join('\r\n');
 }
-async function renderStatistics(panel: vscode.WebviewPanel): Promise<void> {
-	const stats = await vscode.window.withProgress(
-		{ location: vscode.ProgressLocation.Notification, title: 'Analyzing project statistics...' },
-		() => collectProjectStats(),
-	);
-	const csvContent = buildProjectStatsCsv(stats);
-	const rowsHtml = stats.files
-		.map((file) => `<tr data-name="${escapeHtml(file.name.toLowerCase())}" data-path="${escapeHtml(fileDisplayPath(file).toLowerCase())}" data-lines="${file.lines}"><td class="sno"></td><td class="file-name">${escapeHtml(file.name)}</td><td class="lines">${formatCount(file.lines)}</td></tr>`)
+async function refreshProjectStatistics(showProgress: boolean): Promise<void> {
+	if (statisticsRefresh) {
+		return statisticsRefresh;
+	}
+
+	statisticsRefresh = (async () => {
+		try {
+			if (!vscode.workspace.workspaceFolders?.length) {
+				statisticsSidebar?.renderSummary();
+				if (statisticsPanelReady && statisticsPanel) {
+					void statisticsPanel.webview.postMessage({ type: 'statsError' });
+				}
+				return;
+			}
+
+			const stats = showProgress
+				? await vscode.window.withProgress(
+					{ location: vscode.ProgressLocation.Notification, title: 'Analyzing project statistics...' },
+					() => collectProjectStats(),
+				)
+				: await collectProjectStats();
+			if (statisticsPanel) {
+				setStatisticsPanelHtml(statisticsPanel, stats);
+			}
+			statisticsSidebar?.renderSummary(stats);
+		} catch {
+			if (statisticsPanelReady && statisticsPanel) {
+				void statisticsPanel.webview.postMessage({ type: 'statsError' });
+			}
+		}
+	})().finally(() => {
+		statisticsRefresh = undefined;
+	});
+
+	return statisticsRefresh;
+}
+
+function fileRowsHtml(stats: ProjectStats): string {
+	return stats.files
+		.map((file) => `<tr class="file-row" data-name="${escapeHtml(file.name.toLowerCase())}" data-path="${escapeHtml(fileDisplayPath(file).toLowerCase())}" data-extension="${escapeHtml(file.extension.toLowerCase())}" data-lines="${file.lines}"><td class="sno"></td><td class="file-name">${escapeHtml(file.name)}</td><td class="extension">${escapeHtml(file.extension)}</td><td class="lines">${formatCount(file.lines)}</td></tr>`)
 		.join('');
-	const filesHtml = rowsHtml
-		? `<div class="table-wrap"><table class="file-table"><thead><tr><th>S.No</th><th>Name</th><th>No. of lines</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+}
+
+function filesSectionHtml(stats: ProjectStats): string {
+	const rowsHtml = fileRowsHtml(stats);
+	return rowsHtml
+		? `<div class="table-wrap"><table class="file-table"><thead><tr><th>S.No</th><th>Name</th><th>Extension</th><th>No. of lines</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
 		: '<p class="empty">No files found.</p>';
+}
+
+function setStatisticsPanelHtml(panel: vscode.WebviewPanel, stats: ProjectStats): void {
+	const csvContent = buildProjectStatsCsv(stats);
+	const filesHtml = filesSectionHtml(stats);
+	const payload = {
+		type: 'stats' as const,
+		totalFilesLabel: formatCount(stats.files.length),
+		totalLinesLabel: formatCount(stats.totalLines),
+		filesHtml,
+		csvContent,
+	};
+
+	if (statisticsPanelReady) {
+		void panel.webview.postMessage(payload);
+		return;
+	}
 
 	panel.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -360,6 +683,7 @@ h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; margin: 0; }
 .file-table tbody tr { border-top: 1px solid var(--vscode-panel-border); }
 .file-table .sno { color: var(--vscode-descriptionForeground); width: 64px; }
 .file-table .file-name { overflow-wrap: anywhere; }
+.file-table .extension { color: var(--vscode-descriptionForeground); white-space: nowrap; width: 140px; }
 .file-table .lines { text-align: right; white-space: nowrap; width: 120px; }
 .file-table th:last-child, .file-table td.lines { text-align: right; }
 tr[hidden] { display: none !important; }
@@ -382,23 +706,24 @@ tr[hidden] { display: none !important; }
 	</div>
 </div>
 <div class="summary">
-	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 3h7l4 4v10a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 3.5 17V4.5A1.5 1.5 0 0 1 5 3z" stroke="currentColor"/><path d="M12 3v4h4" stroke="currentColor"/></svg></span><div><strong>${formatCount(stats.files.length)}</strong><span>Total files</span></div></div>
-	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 5L4 10l4 5M12 5l4 5-4 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong>${formatCount(stats.totalLines)}</strong><span>Total lines</span></div></div>
+	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 3h7l4 4v10a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 3.5 17V4.5A1.5 1.5 0 0 1 5 3z" stroke="currentColor"/><path d="M12 3v4h4" stroke="currentColor"/></svg></span><div><strong id="total-files">${formatCount(stats.files.length)}</strong><span>Total files</span></div></div>
+	<div class="metric"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 5L4 10l4 5M12 5l4 5-4 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong id="total-lines">${formatCount(stats.totalLines)}</strong><span>Total lines</span></div></div>
 </div>
 <div class="files-header">
 	<h2>Files</h2>
 	<div class="files-toolbar">
-		<label>Sort by: <select id="sort-by" aria-label="Sort files"><option value="name">Name</option><option value="lines">No. of lines</option></select></label>
+		<label>Sort by: <select id="sort-by" aria-label="Sort files"><option value="name">Name</option><option value="extension">Extension</option><option value="lines">No. of lines</option></select></label>
 		<button id="download-csv" class="ghost-button" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v7M5.5 7.5L8 10l2.5-2.5M3.5 13h9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>Export</button>
 	</div>
 </div>
-${filesHtml}
+<div id="files-section">${filesHtml}</div>
 </main>
 <script>
 const vscode = acquireVsCodeApi();
 const search = document.getElementById('search');
 const sortBy = document.getElementById('sort-by');
-const csvContent = ${JSON.stringify(csvContent)};
+const refresh = document.getElementById('refresh');
+let csvContent = ${JSON.stringify(csvContent)};
 const csvProjectName = ${JSON.stringify(sanitizeCsvProjectName(vscode.workspace.name ?? 'Project'))};
 function pad2(value) {
 	return String(value).padStart(2, '0');
@@ -411,22 +736,26 @@ function csvDownloadFileName() {
 }
 function matchScore(row, query) {
 	const name = row.dataset.name || '';
+	const extension = row.dataset.extension || '';
 	if (!query) return 4;
-	if (name === query) return 0;
-	if (name.startsWith(query)) return 1;
-	if (name.includes(query)) return 2;
+	if (name === query || extension === query) return 0;
+	if (name.startsWith(query) || extension.startsWith(query)) return 1;
+	if (name.includes(query) || extension.includes(query)) return 2;
 	return 99;
+}
+function fileRows() {
+	return [...document.querySelectorAll('.file-table tbody tr.file-row')];
 }
 function renumberRows() {
 	let serial = 1;
-	document.querySelectorAll('.file-table tbody tr').forEach((row) => {
+	fileRows().forEach((row) => {
 		if (row.hidden) return;
 		row.querySelector('.sno').textContent = String(serial++);
 	});
 }
 function filterFiles() {
 	const query = search.value.trim().toLowerCase();
-	const rows = [...document.querySelectorAll('.file-table tbody tr')];
+	const rows = fileRows();
 	rows.forEach((row) => {
 		const score = matchScore(row, query);
 		row.hidden = score === 99;
@@ -443,13 +772,28 @@ function filterFiles() {
 }
 function sortRows() {
 	const mode = sortBy.value;
-	const rows = [...document.querySelectorAll('.file-table tbody tr')];
+	const rows = fileRows();
 	rows.sort((first, second) => {
 		if (mode === 'lines') return Number(second.dataset.lines) - Number(first.dataset.lines);
+		if (mode === 'extension') {
+			return (first.dataset.extension || '').localeCompare(second.dataset.extension || '') || (first.dataset.name || '').localeCompare(second.dataset.name || '');
+		}
 		return (first.dataset.name || '').localeCompare(second.dataset.name || '');
 	});
 	rows.forEach((row) => row.parentElement.appendChild(row));
 	renumberRows();
+}
+function applyStats(payload) {
+	document.getElementById('total-files').textContent = payload.totalFilesLabel;
+	document.getElementById('total-lines').textContent = payload.totalLinesLabel;
+	document.getElementById('files-section').innerHTML = payload.filesHtml;
+	csvContent = payload.csvContent;
+	refresh.disabled = false;
+	if (search.value.trim()) {
+		filterFiles();
+		return;
+	}
+	sortRows();
 }
 search.addEventListener('input', filterFiles);
 sortBy.addEventListener('change', () => {
@@ -460,9 +804,21 @@ sortBy.addEventListener('change', () => {
 	sortRows();
 });
 renumberRows();
-document.getElementById('refresh').addEventListener('click', (event) => {
+refresh.addEventListener('click', (event) => {
 	event.currentTarget.disabled = true;
 	vscode.postMessage({ type: 'refresh' });
+});
+window.addEventListener('message', (event) => {
+	if (!event.data) {
+		return;
+	}
+	if (event.data.type === 'stats') {
+		applyStats(event.data);
+		return;
+	}
+	if (event.data.type === 'statsError') {
+		refresh.disabled = false;
+	}
 });
 document.getElementById('download-csv').addEventListener('click', () => {
 	const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -476,24 +832,34 @@ document.getElementById('download-csv').addEventListener('click', () => {
 </script>
 </body>
 </html>`;
+	statisticsPanelReady = true;
 }
 
 class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'aicount.sidebar';
 	private view?: vscode.WebviewView;
+	private resolved = false;
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
 		this.view = webviewView;
 		webviewView.webview.options = { enableScripts: true };
+		if (this.resolved) {
+			return;
+		}
+		this.resolved = true;
 		webviewView.webview.onDidReceiveMessage((message: { type?: string }) => {
 			if (message.type === 'openReport') {
 				void vscode.commands.executeCommand('poc.projectStatistics');
 			}
 		});
+		webviewView.onDidDispose(() => {
+			this.resolved = false;
+			this.view = undefined;
+		});
 		void this.refresh();
 	}
 
-	async refresh(): Promise<void> {
+	renderSummary(stats?: ProjectStats): void {
 		if (!this.view) {
 			return;
 		}
@@ -507,12 +873,19 @@ class StatisticsSidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		const stats = await collectProjectStats();
+		if (!stats) {
+			return;
+		}
+
 		this.view.webview.html = renderSidebarHtml({
 			hasWorkspace: true,
 			totalFiles: stats.files.length,
 			totalLines: stats.totalLines,
 		});
+	}
+
+	async refresh(): Promise<void> {
+		await refreshProjectStatistics(false);
 	}
 }
 
@@ -613,7 +986,7 @@ async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<vo
 
 	if (statisticsPanel) {
 		statisticsPanel.reveal(vscode.ViewColumn.Active);
-		await renderStatistics(statisticsPanel);
+		await refreshProjectStatistics(true);
 		return;
 	}
 
@@ -624,15 +997,17 @@ async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<vo
 		{ enableScripts: true },
 	);
 	statisticsPanel.webview.onDidReceiveMessage(async (message: { type?: string }) => {
-		if (message.type !== 'refresh' || !statisticsPanel) {
+		if (message.type !== 'refresh') {
 			return;
 		}
 
-		await renderStatistics(statisticsPanel);
-		await statisticsSidebar?.refresh();
+		await refreshProjectStatistics(true);
 	});
-	statisticsPanel.onDidDispose(() => statisticsPanel = undefined, null, context.subscriptions);
-	await renderStatistics(statisticsPanel);
+	statisticsPanel.onDidDispose(() => {
+		statisticsPanel = undefined;
+		statisticsPanelReady = false;
+	}, null, context.subscriptions);
+	await refreshProjectStatistics(true);
 }
 
 // This method is called when your extension is activated
