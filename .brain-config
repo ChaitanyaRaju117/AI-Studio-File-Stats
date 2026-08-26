@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "project": "poc",
+  "project": "AI-Studio-File-Stats",
   "remote": "https://github.com/ChaitanyaRaju117/AI-Studio-File-Stats.git",
   "brain_version": "1.0.0",
   "bootstrap": {
