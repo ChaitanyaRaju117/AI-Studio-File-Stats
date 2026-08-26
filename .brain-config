@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "project": "AI-Studio-File-Stats",
+  "remote": "https://github.com/ChaitanyaRaju117/AI-Studio-File-Stats.git",
+  "brain_version": "1.0.0",
+  "bootstrap": {
+    "done": true,
+    "at_commit": "7a71a9f3766270e5e3bb934d1335c4db9d0af1b9",
+    "at": "2026-08-26T05:33:48.065756+00:00"
+  }
+}

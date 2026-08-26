@@ -1,6 +1,12 @@
-# AGENTS.md
-# Auto-maintained by Project Brain. Do not edit manually.
-# Last updated: 2026-08-26 05:32 UTC by PishkePoojitha654 <poojitha.p@srsconsultinginc.com>
+<!-- BEGIN PROJECT BRAIN — auto-generated, do not edit inside this block -->
+This project's engineering memory is maintained by Project Brain.
+Treat the rules below as BINDING on any change you make to this repository.
+They are captured from this repo's own code, docs and history — where they
+conflict with your assumptions, follow them or ask the user.
+
+For the full, per-file detail (this file is a capped summary), run:
+    brain context <path/to/file>     # everything known about one file
+    brain export                     # the complete memory snapshot
 
 ## Instructions for AI Agents
 # Follow these steps before modifying ANY file in this repository:
@@ -21,3 +27,4 @@
 #                  record_memory, get_status
 
 No engineering memory captured yet. Memory is captured automatically on every git push.
+<!-- END PROJECT BRAIN -->
