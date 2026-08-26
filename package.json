@@ -4,6 +4,11 @@
   "publisher": "chaitanyarajuBahatam",
   "description": "Shows workspace file and line counts in the aicount sidebar, with a full report and CSV export",
   "version": "0.0.15",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/srs-india/AI-Studio-File-Stats"
+  },
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"

@@ -64,3 +64,11 @@ Added privacy exclusions for environment, Docker, Git, and lock files.
 ### 0.0.9
 
 Install popup opens the aicount sidebar and Project Statistics report. The report lists file names and line counts without grouping by type. CSV export includes totals and a unique timestamped file name.
+
+## License
+
+This extension is licensed under the MIT License. See [License.txt](License.txt).
+
+## Privacy
+
+This extension does not collect, store, or send your source code or personal data. See [privacy.md](privacy.md).
