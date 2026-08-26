@@ -1137,8 +1137,8 @@ async function showInstallPrompt(context: vscode.ExtensionContext): Promise<void
 	const open = { title: 'Open' };
 	const close = { title: 'Close', isCloseAffordance: true };
 	const choice = await vscode.window.showInformationMessage(
-		'aicount is installed. Do you want to see the project structure?',
-		{ modal: true, detail: 'Open the report now, or use the aicount icon in the left sidebar later. This message is shown once per install.' },
+		'AI-Studio-File-Stats is installed. Do you want to see the project structure?',
+		{ modal: true, detail: 'Open the report now, or use the AI-Studio-File-Stats icon in the left sidebar later. This message is shown once per install.' },
 		open,
 		close,
 	);
@@ -1188,22 +1188,14 @@ async function showStatisticsPanel(context: vscode.ExtensionContext): Promise<vo
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "poc" is now active!');
 	void vscode.commands.executeCommand('setContext', 'aicount.enabled', true);
 
 	const sidebarProvider = new StatisticsSidebarProvider();
 	statisticsSidebar = sidebarProvider;
-	const disposable = vscode.commands.registerCommand('poc.helloWorld', () => {
-		vscode.window.showInformationMessage('Hello World from poc!');
-	});
 	const statisticsCommand = vscode.commands.registerCommand('poc.projectStatistics', () => showStatisticsPanel(context));
 	const refreshCommand = vscode.commands.registerCommand('poc.refreshSidebar', () => sidebarProvider.refresh());
 
 	context.subscriptions.push(
-		disposable,
 		statisticsCommand,
 		refreshCommand,
 		vscode.window.registerWebviewViewProvider(StatisticsSidebarProvider.viewType, sidebarProvider, {

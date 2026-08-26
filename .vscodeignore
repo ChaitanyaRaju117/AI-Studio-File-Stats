@@ -10,3 +10,14 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 .welcome-shown
+out/test/**
+.brain/**
+.brain-config
+.brain-context
+.cursorrules
+.cursor/**
+.mcp.json
+.cline/**
+.windsurf/**
+.github/**
+AGENTS.md

@@ -13,4 +13,4 @@ All computing, processing, and code analysis are performed entirely on your loca
 Any future updates to this extension will respect this zero-data policy. If any configuration requirements change, users will be explicitly notified.
 
 ## 4. Contact & Support
-If you have any questions or security concerns regarding this policy, please open an issue on our official repository tracker.
+If you have any questions or security concerns regarding this policy, contact SRS Consulting Inc.

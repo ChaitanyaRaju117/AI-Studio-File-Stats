@@ -1,14 +1,10 @@
 {
-  "name": "python-project-statistics",
-  "displayName": "aicount",
-  "publisher": "chaitanyarajuBahatam",
-  "description": "Shows workspace file and line counts in the aicount sidebar, with a full report and CSV export",
-  "version": "0.0.15",
+  "name": "ai-studio-file-stats",
+  "displayName": "AI-Studio-File-Stats",
+  "publisher": "SRSCONSULTINGINC",
+  "description": "Shows workspace file and line counts in the AI-Studio-File-Stats sidebar, with a full report and CSV export",
+  "version": "0.0.1",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/srs-india/AI-Studio-File-Stats"
-  },
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0"
@@ -23,10 +19,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "poc.helloWorld",
-        "title": "Hello World"
-      },
-      {
         "command": "poc.projectStatistics",
         "title": "Project Statistics"
       },
@@ -40,7 +32,7 @@
       "activitybar": [
         {
           "id": "aicount",
-          "title": "aicount",
+          "title": "AI-Studio-File-Stats",
           "icon": "media/activitybar.svg",
           "when": "aicount.enabled"
         }
